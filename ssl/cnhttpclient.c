@@ -12,6 +12,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <arpa/inet.h>
 
 #define MAX_RESPONSE_LENGTH 25000000
 
@@ -324,8 +325,9 @@ int CNHTTPClientWSSend( struct cnhttpclientresponse * conn, const char * data, i
 	sppt += length;
 
 	int k;
-	printf( "%d: ", sppt - senddata );
-	for( k = 0; k < sppt - senddata; k++ )
+	int len = sppt - senddata;
+	printf( "%d: ", len );
+	for( k = 0; k < len; k++ )
 	{
 		printf( "%02x ", senddata[k] );
 	}
@@ -404,7 +406,7 @@ int CNHTTPClientWSRecv( struct cnhttpclientresponse * conn, char * data, int len
 			{
 				int i;
 				int dwords = (len+3)/4;
-				uint32_t * dsp = buffptr;
+				uint32_t * dsp = (uint32_t *)buffptr;
 				for( i = 0; i < dwords; i++ )
 				{
 					*(dsp++) = ((uint32_t*)data)[i] ^ mask;
