@@ -82,7 +82,7 @@ struct cnhttpclientresponse * CNHTTPClientTransact( struct cnhttpclientrequest *
 		urlptr += i;
 	}
 
-	printf( "Connecting: %s/%s : %d\n", reqhost, selhost, selport );
+	//printf( "Connecting: %s/%s : %d\n", reqhost, selhost, selport );
 
 	//urlptr now contains "/index.html"
 	//selhost contains the string of the actual hostname to connect to (must be free'd)
@@ -203,7 +203,7 @@ struct cnhttpclientresponse * CNHTTPClientTransact( struct cnhttpclientrequest *
 				}
 
 				currentcontent += responselength - k;
-				puts( ret->fullheader );
+				//puts( ret->fullheader );
 				if( responsecode == 101 && is_websocket ) break;
 			}
 		}
@@ -326,12 +326,12 @@ int CNHTTPClientWSSend( struct cnhttpclientresponse * conn, const char * data, i
 
 	int k;
 	int len = sppt - senddata;
-	printf( "%d: ", len );
-	for( k = 0; k < len; k++ )
-	{
-		printf( "%02x ", senddata[k] );
-	}
-	printf( "\n" );
+//	printf( "%d: ", len );
+//	for( k = 0; k < len; k++ )
+//	{
+//		printf( "%02x ", senddata[k] );
+//	}
+//	printf( "\n" );
 
 	return CNSSLWrite( conn->underlying_connection, senddata, sppt - senddata );
 }
