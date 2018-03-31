@@ -324,7 +324,7 @@ void http_disconnetcb(int conn ) {
 	int r = conn;
 	if( r>=0 )
 	{
-		MFSClose( &HTTPConnections[r].data.filedescriptor );
+		if( !HTTPConnections[r].is_dynamic ) MFSClose( &HTTPConnections[r].data.filedescriptor );
 		HTTPConnections[r].state = 0;
 	}
 }
@@ -609,7 +609,7 @@ void  WebSocketSend( uint8_t * data, int size )
 {
 	DataStartPacket();;
 	PushByte( 0x82 ); //0x81 is text.
-	if( size > 126 )
+	if( size >= 126 )
 	{
 		PushByte( 0x00 | 126 );
 		PushByte( size>>8 );
