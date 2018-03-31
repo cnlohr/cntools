@@ -80,6 +80,7 @@ struct HTTPConnection
 	{
 		struct MFSFileInfo filedescriptor;
 		struct UserData { uint16_t a, b, c; } user;
+		struct UserDataPtr { void * v; } userptr;
 	} data;
 
 	void * rcb;

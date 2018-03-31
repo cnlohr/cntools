@@ -126,7 +126,7 @@ void WebSocketTick()
 }
 
 void WebSocketData( int len )
-{	
+{
 	if( curhttp->rcbDat )
 	{
 		((void(*)( int ))curhttp->rcbDat)(  len ); 

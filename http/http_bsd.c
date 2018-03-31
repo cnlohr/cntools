@@ -28,6 +28,11 @@ uint8_t   databuff[1536];
 int cork_binary_rx;
 
 
+#ifndef HTTP_POLL_TIMEOUT
+#define HTTP_POLL_TIMEOUT 100 //100ms timeout.
+#endif
+
+
 #define DESTROY_SOCKETS_LIST 200
 int destroy_sockets[DESTROY_SOCKETS_LIST];
 int destroy_socket_head = 0;
@@ -191,7 +196,7 @@ int TickHTTP()
 		}
 
 		//Do something to watch all currently-waiting sockets.
-		poll( allpolls, pollct, 200 ); //100ms timeout.
+		poll( allpolls, pollct, HTTP_POLL_TIMEOUT ); 
 
 		if( allpolls[0].revents & POLLIN )
 		{
