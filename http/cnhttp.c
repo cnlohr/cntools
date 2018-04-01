@@ -533,9 +533,9 @@ void  WebSocketGotData( uint8_t c )
 		if( opcode == 128 )
 		{
 			//Close connection.
-			HTDEBUG( "CLOSE\n" );
-			curhttp->state = HTTP_WAIT_CLOSE;
-			break;
+			//HTDEBUG( "CLOSE\n" );
+			//curhttp->state = HTTP_WAIT_CLOSE;
+			//break;
 		}
 
 		payloadlen &= 0x7f;
