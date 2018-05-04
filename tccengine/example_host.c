@@ -3,11 +3,17 @@
 #include "tccengine.h"
 #include "tccexports.h"
 
+
+void PopFn( TCCEngine * tce )
+{
+	PopulateTCCE( tce );
+}
+
 int main()
 {
 	unsigned char tcceb[8192];
 
-	TCCEngine * e = TCCECreate( "example_script.c", 0, 0, PopulateTCCE, tcceb );
+	TCCEngine * e = TCCECreate( "example_script.c", 0, 0, PopFn, tcceb );
 
 	while(1)
 	{

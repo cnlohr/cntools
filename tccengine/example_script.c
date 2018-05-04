@@ -1,4 +1,5 @@
 #include "tccexports.h"
+#include "../os_generic.h"
 
 struct ScriptStructure
 {
@@ -23,7 +24,7 @@ int stop( struct ScriptStructure * cid )
 
 int update( struct ScriptStructure * cid )
 {
-	printf( "Update: %d\n", cid->compiles );
+	printf( "Update: %d %f\n", cid->compiles, OGGetAbsoluteTime() );
 }
 
 
