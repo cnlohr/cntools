@@ -27,62 +27,78 @@
 	This file may also be licensed under the MIT/x11 license if you wish.
 */
 
-#ifndef _TCCENGINE_H
-#define _TCCENGINE_H
-
-#include <stdio.h>
+#ifndef _TCCEXPORTS_H
+#define _TCCEXPORTS_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#ifndef LIBTCC_H
-typedef struct TCCState TCCState;
+
+#ifdef INCLUDEME
+INCLUDEME
 #endif
 
-#define MAX_ATTACHED_FILES 20
+//This file contains all of the things available to the scripts
+void PrintHello();
 
-typedef struct TCCEngine TCCEngine;
+//Except this function, which is the callback for populating the exports.
+#ifndef TCC
+#include "tccengine.h"
+void PopulateTCCE(TCCEngine * tce );
+#else
+//various util functions
+float sinf( float f );
+float powf( float b, float e );
+float cosf( float f );
+float sqrtf( float f );
+float atan2f( float a, float b );
 
-typedef void (*PopulateTCCEFunction)(TCCEngine * tce );
-typedef int (*TCELinkage)( void * v );
+int abs( int i );
+double sin( double f );
+double pow( double b, double e );
+double cos( double f );
+double tan( double f );
+double sqrt( double f );
+double atan2( double a, double b );
+double atof( const char * s );
 
-struct TCCEngine
-{
-	//Dupped
-	const char * filename;
-	double readtime;
+const char * strstr( const char * needle, const char * haystack );
 
-	const char * attachedp[MAX_ATTACHED_FILES];
-	double attachedtp[MAX_ATTACHED_FILES];
+int printf(const char *format, ...);
+int sprintf(char * buf, const char *format, ...);
+int sscanf(const char *format, ...);
+int strcmp( const char * a, const char * b );
+int strlen( const char * stn );
+int memcpy( void * o, const void * i, int cp );
 
-	TCCState * state;
-	PopulateTCCEFunction popfn;
-	void * image;
+int rounddoubletoint( double d );
+int roundfloattoint( float f );
 
-	TCELinkage init;  //called the very first run
-	TCELinkage start; //called any time the script is loaded/reloaded
-	TCELinkage stop;  //called any time the script is unloaded (For reloading)
-	TCELinkage update;//called every frame.
+#endif
 
-	void * cid;
-};
+extern struct TCCEngine * tccengine;
+
+//extern void * cid; //Course ID
+#ifdef TCC
+#ifdef WIN32
+#define cid ((void*)cidval)
+#else
+extern void * cid;
+#endif
+#endif
+
+extern struct TCCEngine * gtce;
+
+//////
+////// Add additional header files or definitions you want to be available to TinyCC here.
+//////
 
 
-//will not dup the "attachedfiles" you need to dup it or not delete it.
-TCCEngine * TCCECreate( const char * tccfile, const char ** attachedfiles, int attachecount, PopulateTCCEFunction  popfn, void * cid );
-
-int TCCECheck( TCCEngine * tce, int first ); //returns 1 if re-compiling good. 0 if nothing was done.
-void TCCSetDefine( TCCEngine * tce, const char * symname, const char * sym );
-void TCCEDestroy( TCCEngine * tce );
-void * TCCEGetSym( TCCEngine * tce, const char * symname );
-void TCCESetSym( TCCEngine * tce, const char * symname, void * sym );
+#endif
 
 #ifdef __cplusplus
 };
-#endif
-
-
 #endif
 
 
