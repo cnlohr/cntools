@@ -139,7 +139,9 @@ int TCCECheck( TCCEngine * tce, int first )
 
 	tcc_add_library( tce->state, "m" );
 	tcc_add_include_path( tce->state, ".." );
-	tcc_add_include_path( tce->state, "../subseaqnup" );
+	tcc_add_include_path( tce->state, "../cntools/tccengine/tcc/include_tcc" );
+	tcc_add_include_path( tce->state, "cntools/tccengine/tcc/include_tcc" );
+	tcc_add_include_path( tce->state, "../../cntools/tccengine/tcc/include_tcc" );
 	tcc_add_include_path( tce->state, "tcc/include_tcc/include" );
 	tcc_add_include_path( tce->state, "." );
 	tcc_define_symbol( tce->state, "TCC", 0 );
