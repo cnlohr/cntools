@@ -112,7 +112,6 @@ void PopulateTCCE(TCCEngine * tce )
 	//TCCESetSym( tce, "OGGetAbsoluteTime", OGGetAbsoluteTime );
 	//Add additional definitions here.
 	
-	
 /*
 	int i;
 	char includeme[65536];
