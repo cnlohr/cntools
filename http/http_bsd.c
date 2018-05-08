@@ -144,6 +144,11 @@ int EndTCPWrite( int socket )
 	return r;
 }
 
+void TermHTTPServer()
+{
+	shutdown( serverSocket, SHUT_RDWR );
+}
+
 int TickHTTP()
 {
 	int i;
@@ -198,6 +203,16 @@ int TickHTTP()
 		//Do something to watch all currently-waiting sockets.
 		poll( allpolls, pollct, HTTP_POLL_TIMEOUT ); 
 
+		//If there's faults, bail.
+		if( allpolls[0].revents & (POLLERR|POLLHUP) )
+		{
+			closesocket( serverSocket );
+			for( i = 0; i < HTTP_CONNECTIONS;i ++)
+			{
+				if( sockets[i] ) closesocket( sockets[i] );
+			}
+			break;
+		}
 		if( allpolls[0].revents & POLLIN )
 		{
 			struct   sockaddr_in tin;
@@ -221,14 +236,14 @@ int TickHTTP()
 			setsockopt( tsocket, SOL_SOCKET, SO_LINGER, &lx, sizeof( lx ) );
 #endif
 
-		int r = httpserver_connectcb( tsocket );
+			int r = httpserver_connectcb( tsocket );
 
-		if( r == -1 )
-		{
-		closesocket( tsocket );
-		}
+			if( r == -1 )
+			{
+				closesocket( tsocket );
+			}
 
-		sockets[r] = tsocket;
+			sockets[r] = tsocket;
 
 		}
 		for( i = 1; i < pollct; i++)

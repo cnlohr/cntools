@@ -132,8 +132,16 @@ struct cnhttpclientresponse * CNHTTPClientTransact( struct cnhttpclientrequest *
 	}
 	else
 	{
-		char full_header[encurilen + 30 + strlen(reqhost) + (r->AddedHeaders?strlen( r->AddedHeaders ):0)];
-		int fhlen = sprintf( full_header, "%s %s HTTP/1.1\r\nConnection: close\r\nHost: %s\r\n%s\r\n\r\n", r->AuxData?"POST":"GET", encodeduri, reqhost, r->AddedHeaders?r->AddedHeaders:"" );
+		char full_header[encurilen + 30 + strlen(reqhost) + (r->AddedHeaders?strlen( r->AddedHeaders ):0)+50];
+		int fhlen = sprintf( full_header, "%s %s HTTP/1.1\r\nConnection: close\r\nHost: %s\r\n", r->AuxData?"POST":"GET", encodeduri, reqhost );
+
+		if( r->AddedHeaders && strlen( r->AddedHeaders ) )
+			fhlen += sprintf( full_header + fhlen, "%s\r\n", r->AddedHeaders );
+		if( r->AuxData )
+			fhlen += sprintf( full_header + fhlen, "Content-length: %d\r\n", r->AuxDataLength );
+
+		fhlen += sprintf( full_header + fhlen, "\r\n" );
+
 		free( reqhost );
 		CNSSLWrite( c, full_header, fhlen );
 		if( r->AuxData )

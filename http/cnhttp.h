@@ -49,7 +49,9 @@ int TCPDoneSend( int socket );
 int EndTCPWrite( int socket );
 
 #define HTTP_CONNECTIONS 50
+#ifndef MAX_HTTP_PATHLEN
 #define MAX_HTTP_PATHLEN 80
+#endif
 #define HTTP_SERVER_TIMEOUT		500
 
 

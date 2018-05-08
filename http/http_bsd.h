@@ -21,6 +21,7 @@ void PushString( const char * data );
 int TCPCanSend( int socket, int size );
 int TCPDoneSend( int socket );
 int EndTCPWrite( int socket );
+void TermHTTPServer();
 
 extern int cork_binary_rx;
 
