@@ -78,7 +78,7 @@ struct TermStructure ts;
 void ResetTerminal( struct TermStructure * ts )
 {
 	ts->curx = ts->cury = 0;
-	ts->echo = 1;
+	ts->echo = 0;
 	ts->escapestate = 0;
 	memset( ts->text_buffer, 0, ts->charx * ts->chary );
 }
@@ -159,6 +159,7 @@ void EmitChar( struct TermStructure * ts, int crx )
 				case 'G': ts->curx = ts->csistate[0] - 1; if( ts->curx < 0 ) ts->curx = 0; if( ts->curx >= ts->charx ) ts->curx = ts->charx-1; break;
 				case 'd': ts->cury = ts->csistate[0] - 1; if( ts->cury < 0 ) ts->cury = 0; if( ts->cury >= ts->chary ) ts->cury = ts->chary-1; break;
 				case ';': ts->escapestate = 2; ts->csistate[1] = -1; ts->whichcsi = 1; break;
+				case 'f':
 				case 'H':
 					if( ts->csistate[0] < 0 ) ts->csistate[0] = 1;
 					if( ts->csistate[1] < 0 ) ts->csistate[1] = 1;
@@ -196,6 +197,21 @@ void EmitChar( struct TermStructure * ts, int crx )
 						memset( &ts->text_buffer[ts->cury*ts->charx], 0, ts->charx ); break;
 					}
 					break;
+				case 'L':
+					//Inset blank lines.
+					{
+						int l;
+						if( ts->csistate[0] > 0 )
+						{
+							for( l = ts->chary-1; l >= ts->cury+ts->csistate[0]; l-- )
+							{
+								printf( "%d %d  (Copy %d to %d)\n", ts->cury, ts->csistate[0], l-ts->csistate[0], l );
+								memcpy( &ts->text_buffer[l*ts->charx], &ts->text_buffer[(l-ts->csistate[0])*ts->charx], ts->charx );
+							}
+							memset( &ts->text_buffer[ts->cury*ts->charx], 0, ts->charx * ts->csistate[0] );
+						}
+					}
+					break;
 				case 'P':
 					{
 						int pos = ts->curx+ts->cury*ts->charx;
@@ -205,7 +221,7 @@ void EmitChar( struct TermStructure * ts, int crx )
 					}
 					break;
 				default:
-					fprintf( stderr, "UNHANDLED CSI Esape: %c\n", crx );
+					fprintf( stderr, "UNHANDLED CSI Esape: %c [%d]\n", crx, ts->csistate[0] );
 				}
 			}
 		}
@@ -224,6 +240,7 @@ void EmitChar( struct TermStructure * ts, int crx )
 		ts->text_buffer[ts->curx + ts->cury * ts->charx] = crx;
 		ts->curx++;
 		if( ts->curx >= ts->charx ) { ts->curx = 0; ts->cury++; goto handle_newline; }
+		if( crx < 32 || crx < 0 ) printf( "CRX %d\n", (uint8_t)crx );
 	}
 
 	goto end;
@@ -318,7 +335,7 @@ int main()
 	ts.screen_mutex = OGCreateMutex();
 	ts.charx = INIT_CHARX;
 	ts.chary = INIT_CHARY;
-	ts.echo = 1;
+	ts.echo = 0;
 	short w = ts.charx * font_w * (CHAR_DOUBLE+1);
 	short h = ts.chary * font_h * (CHAR_DOUBLE+1);
 	CNFGSetup( "Test terminal", w, h );
@@ -344,6 +361,8 @@ int main()
 	OGCreateThread( rxthread, (void*)&ts.lis[1] );
 
 	usleep(10000);
+	write( ts.pipes[0], "script /dev/null\n", 17 );
+	write( ts.pipes[0], "export TERM=ansi\n", 17 );
 
 	while(1)
 	{
@@ -387,7 +406,7 @@ int main()
 	#endif
 		}
 		CNFGUpdateScreenWithBitmap( (unsigned long *)framebuffer, w, h );
-		CNFGSwapBuffers();
+	//	CNFGSwapBuffers();
 	}
 
 }
