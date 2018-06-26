@@ -12,7 +12,7 @@ int spawn_process_with_pipes( const char * execparam, char * const argv[], int p
 
 #define INIT_CHARX  80
 #define INIT_CHARY  25
-#define CHAR_DOUBLE 1   //Set to 1 to double size, or 0 for normal size.
+#define CHAR_DOUBLE 0   //Set to 1 to double size, or 0 for normal size.
 
 int charset_w, charset_h, font_w, font_h;
 uint32_t * font;
@@ -95,8 +95,8 @@ void EmitChar( struct TermStructure * ts, int crx )
 	else if( crx == '\n' ) { goto newline; }
 	else if( crx == 7 ) { /*beep*/ }
 	else if( crx == 8 ) {
-		ts->text_buffer[ts->curx+ts->cury*ts->charx] = 0;
 		if( ts->curx ) ts->curx--;
+		ts->text_buffer[ts->curx+ts->cury*ts->charx] = 0;
 	}
 	else if( crx == 9 ) {
 			ts->curx = (ts->curx & 7) + 8;
@@ -106,6 +106,7 @@ void EmitChar( struct TermStructure * ts, int crx )
 			}
 	else if( crx == 0x18 || crx == 0x1a ) { ts->escapestate = 0; }
 	else if( crx == 0x1b ) { ts->escapestate = 1; }
+	else if( crx == 0x9b ) { goto csi_state_start; }
 	else if( ts->escapestate )
 	{
 		if( ts->escapestate == 1 )
@@ -116,21 +117,19 @@ void EmitChar( struct TermStructure * ts, int crx )
 				case 'c': ResetTerminal(ts); break;
 				case 'D': goto linefeed;
 				case 'E': goto newline;
-				case 'H': break; //Set tabstop
+				//case 'H': break; //Set tabstop
 				case 'M': if( ts->cury ) ts->cury--; break;
 				case 'Z': FeedbackTerminal( ts, "\x1b[?6c", 5 ); break;
 				case '7': ts->savex = ts->curx; ts->savey = ts->cury; break;
 				case '8': ts->curx = ts->savex; ts->cury = ts->savey; break;
-				case '[': ts->escapestate = 2;
-					ts->csistate[0] = -1;
-					ts->whichcsi = 0;
-					break;
+				case '[': goto csi_state_start;
 				case ')':
 				case '%':
 				case '?':
 				case '(': ts->escapestate = 5; break;
-
-				default: break;
+				default: 
+					fprintf( stderr, "UNHANDLED Esape: %c\n", crx );
+					break;
 			}
 		}
 		else if( ts->escapestate == 2 )
@@ -157,7 +156,7 @@ void EmitChar( struct TermStructure * ts, int crx )
 				case 'B': ts->cury += ts->csistate[0]; if( ts->cury >= ts->chary ) ts->cury = ts->chary - 1; break;
 				case 'C': ts->curx += ts->csistate[0]; if( ts->curx >= ts->charx ) ts->curx = ts->charx - 1; break;
 				case 'D': ts->curx -= ts->csistate[0]; if( ts->curx < 0 ) ts->curx = 0; break;
-				case 'G': ts->curx = ts->csistate[0] - 1; if( ts->curx < 0 ) ts->curx = 0; if( ts->curx >= ts->charx ) ts->curx = ts->charx-1;break;
+				case 'G': ts->curx = ts->csistate[0] - 1; if( ts->curx < 0 ) ts->curx = 0; if( ts->curx >= ts->charx ) ts->curx = ts->charx-1; break;
 				case 'd': ts->cury = ts->csistate[0] - 1; if( ts->cury < 0 ) ts->cury = 0; if( ts->cury >= ts->chary ) ts->cury = ts->chary-1; break;
 				case ';': ts->escapestate = 2; ts->csistate[1] = -1; ts->whichcsi = 1; break;
 				case 'H':
@@ -180,6 +179,7 @@ void EmitChar( struct TermStructure * ts, int crx )
 							case 1:
 								memset( &ts->text_buffer[0], 0, pos ); break;
 							case 2:
+							case 3:
 								memset( &ts->text_buffer[0], 0, end ); break;
 						}
 					}
@@ -205,7 +205,7 @@ void EmitChar( struct TermStructure * ts, int crx )
 					}
 					break;
 				default:
-					fprintf( stderr, "Esape: %c\n", crx );
+					fprintf( stderr, "UNHANDLED CSI Esape: %c\n", crx );
 				}
 			}
 		}
@@ -234,6 +234,11 @@ newline:
 	ts->cury ++;
 	ts->curx = 0;
 	goto handle_newline;
+csi_state_start:
+	ts->escapestate = 2;
+	ts->csistate[0] = -1;
+	ts->whichcsi = 0;
+	goto end;
 handle_newline:
 	if( ts->cury >= ts->chary )
 	{
@@ -354,7 +359,7 @@ int main()
 			uint32_t * fbo =   &framebuffer[x*font_w*(CHAR_DOUBLE+1) + y*font_h*w*(CHAR_DOUBLE+1)];
 			uint32_t * start = &font[atlasx*font_w+atlasy*font_h*charset_w];
 
-	#ifdef CHAR_DOUBLE
+	#if CHAR_DOUBLE==1
 			for( cy = 0; cy < font_h; cy++ )
 			{
 				for( cx = 0; cx < font_w; cx++ )
