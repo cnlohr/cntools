@@ -94,7 +94,10 @@ void EmitChar( struct TermStructure * ts, int crx )
 	if( crx == '\r' ) { goto linefeed; }
 	else if( crx == '\n' ) { goto newline; }
 	else if( crx == 7 ) { /*beep*/ }
-	else if( crx == 8 ) { if( ts->curx ) ts->curx--; /*backspace*/ }
+	else if( crx == 8 ) {
+		ts->text_buffer[ts->curx+ts->cury*ts->charx] = 0;
+		if( ts->curx ) ts->curx--;
+	}
 	else if( crx == 9 ) {
 			ts->curx = (ts->curx & 7) + 8;
 			if( ts->curx >= ts->charx )
@@ -145,7 +148,7 @@ void EmitChar( struct TermStructure * ts, int crx )
 				int is_seq_default = ts->csistate[ts->whichcsi] < 0;
 				if( is_seq_default ) ts->csistate[ts->whichcsi] = 1; //Default
 
-				//printf( "CRX: %d %d %c\n", ts->csistate[0], ts->csistate[1], crx );
+				//printf( "CRX: %d %d  %d %d %c\n", ts->csistate[0], ts->csistate[1], ts->curx, ts->cury, crx );
 				switch( crx )
 				{
 				case 'F': ts->curx = 0;
@@ -173,11 +176,11 @@ void EmitChar( struct TermStructure * ts, int crx )
 						switch( ts->csistate[0] ) 
 						{
 							case 0:
-								memset( &ts->text_buffer[pos], 0, end-pos-1 ); break;
+								memset( &ts->text_buffer[pos], 0, end-pos ); break;
 							case 1:
 								memset( &ts->text_buffer[0], 0, pos ); break;
 							case 2:
-								memset( &ts->text_buffer[0], 0, end-1 ); break;
+								memset( &ts->text_buffer[0], 0, end ); break;
 						}
 					}
 					break; 
@@ -188,7 +191,7 @@ void EmitChar( struct TermStructure * ts, int crx )
 					case 0:
 						memset( &ts->text_buffer[ts->curx+ts->cury*ts->charx], 0, ts->charx-ts->curx ); break;
 					case 1:	
-						memset( &ts->text_buffer[ts->cury*ts->charx], 0, ts->curx-1 ); break;
+						memset( &ts->text_buffer[ts->cury*ts->charx], 0, ts->curx ); break;
 					case 2:
 						memset( &ts->text_buffer[ts->cury*ts->charx], 0, ts->charx ); break;
 					}
@@ -220,7 +223,7 @@ void EmitChar( struct TermStructure * ts, int crx )
 	{
 		ts->text_buffer[ts->curx + ts->cury * ts->charx] = crx;
 		ts->curx++;
-		if( ts->curx >= ts->charx ) { ts->curx = 0; goto handle_newline; }
+		if( ts->curx >= ts->charx ) { ts->curx = 0; ts->cury++; goto handle_newline; }
 	}
 
 	goto end;
@@ -285,6 +288,7 @@ void HandleKey( int keycode, int bDown )
 	if( bDown )
 	{
 		if( keycode == 65293 ) keycode = 10;
+		if( keycode == 65288 ) keycode = 8;
 		else if( keycode  > 255 ) {
 			fprintf( stderr, "%d\n", keycode );
 			return;
