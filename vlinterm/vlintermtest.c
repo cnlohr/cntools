@@ -50,18 +50,37 @@ int LoadFont(const char * fontfile)
 	return 0;
 }
 
+#define MAX_CSI_PARAMS 8
 
 struct TermStructure
 {
 	int pipes[3];
 	uint8_t * text_buffer;
+	uint8_t * attrib_buffer;
+	uint8_t * color_buffer;
+	int current_color;
+	int current_attributes;
+
 	int savex, savey;
 	int curx, cury;
 	int charx, chary;
 	int echo;
-	int csistate[2];
+
+	int csistate[MAX_CSI_PARAMS];
 	int whichcsi;
+	int escapestart; // [ or ]
 	int escapestate;
+	int dec_priv_csi;
+
+	int dec_keypad_mode;
+	int dec_private_mode;
+
+	int osc_command_place;
+	char osc_command[128];
+
+
+	int scroll_top;
+	int scroll_bottom;
 
 	//This is here so we can handle information from stdout as well as stderr.
 	struct LaunchInfo
@@ -75,12 +94,51 @@ struct TermStructure
 
 struct TermStructure ts;
 
+void BufferSet( struct TermStructure * ts, int start, int value, int length )
+{
+	int valuec = ts->current_color;
+	int valueatt = ts->current_attributes;
+	if( length == 1 )
+	{
+		ts->text_buffer[start] = value;
+		ts->color_buffer[start] = ts->current_color;
+		ts->attrib_buffer[start] = ts->current_attributes;
+	}
+	else
+	{
+		memset( ts->text_buffer + start, value, length );
+		memset( ts->attrib_buffer + start, valueatt, length );
+		memset( ts->color_buffer + start, valuec, length );
+	}
+}
+
+void BufferCopy( struct TermStructure * ts, int dest, int src, int length )
+{
+	if( src < 0 ) { fprintf( stderr, "invalid buffer copy [0]\n" ); } 
+	if( dest < 0 ) { fprintf( stderr, "invalid buffer copy [1]\n" ); } 
+	if( src + length > ts->charx*ts->chary ) { fprintf( stderr, "invalid buffer copy [2]\n" ); } 
+	if( dest + length > ts->charx*ts->chary ) { fprintf( stderr, "invalid buffer copy [3]\n" ); } 
+
+	memcpy( ts->text_buffer + dest,   ts->text_buffer + src, length );
+	memcpy( ts->attrib_buffer + dest, ts->attrib_buffer + src, length );
+	memcpy( ts->color_buffer + dest,  ts->color_buffer + src, length );
+}
+
 void ResetTerminal( struct TermStructure * ts )
 {
+	ts->dec_private_mode = 0;
+
 	ts->curx = ts->cury = 0;
 	ts->echo = 0;
 	ts->escapestate = 0;
-	memset( ts->text_buffer, 0, ts->charx * ts->chary );
+
+	ts->current_color = 7;
+	ts->current_attributes = 0;
+
+	ts->scroll_top = -1;
+	ts->scroll_bottom = -1;
+
+	BufferSet( ts, 0, 0, ts->charx * ts->chary );
 }
 
 void FeedbackTerminal( struct TermStructure * ts, uint8_t * data, int len )
@@ -90,20 +148,22 @@ void FeedbackTerminal( struct TermStructure * ts, uint8_t * data, int len )
 
 void EmitChar( struct TermStructure * ts, int crx )
 {
+//	fprintf( stderr, "(%d %d %c)", crx, ts->curx, crx );
 	OGLockMutex( ts->screen_mutex );
 	if( crx == '\r' ) { goto linefeed; }
 	else if( crx == '\n' ) { goto newline; }
-	else if( crx == 7 ) { /*beep*/ }
+	else if( crx == 7 && ts->escapestate != 3 /* Make sure we're not in the OSC CSI */ ) { /*beep*/ }
 	else if( crx == 8 ) {
 		if( ts->curx ) ts->curx--;
-		ts->text_buffer[ts->curx+ts->cury*ts->charx] = 0;
+		BufferSet( ts, ts->curx+ts->cury*ts->charx, 0, 1 );
 	}
 	else if( crx == 9 ) {
-			ts->curx = (ts->curx & 7) + 8;
+			ts->curx = (ts->curx & (~7)) + 8;
 			if( ts->curx >= ts->charx )
 				ts->curx = ts->charx-1;
 			/*tabstop*/
 			}
+	else if( crx == 0x0f || crx == 0x0e ) { /*Activate other charsets*/ }
 	else if( crx == 0x18 || crx == 0x1a ) { ts->escapestate = 0; }
 	else if( crx == 0x1b ) { ts->escapestate = 1; }
 	else if( crx == 0x9b ) { goto csi_state_start; }
@@ -119,14 +179,16 @@ void EmitChar( struct TermStructure * ts, int crx )
 				case 'E': goto newline;
 				//case 'H': break; //Set tabstop
 				case 'M': if( ts->cury ) ts->cury--; break;
-				case 'Z': FeedbackTerminal( ts, "\x1b[?6c", 5 ); break;
+				//case 'Z': FeedbackTerminal( ts, "\x1b[?6c", 5 ); break;
 				case '7': ts->savex = ts->curx; ts->savey = ts->cury; break;
 				case '8': ts->curx = ts->savex; ts->cury = ts->savey; break;
 				case '[': goto csi_state_start;
-				case ')':
-				case '%':
-				case '?':
-				case '(': ts->escapestate = 5; break;
+				case '=': ts->dec_keypad_mode = 1; break;
+				case '>': ts->dec_keypad_mode = 2; break;
+				case ']': goto csi_state_start;
+				//case ')':
+				//case '%':
+				//case '(': ts->escapestate = 5; break;
 				default: 
 					fprintf( stderr, "UNHANDLED Esape: %c\n", crx );
 					break;
@@ -134,12 +196,65 @@ void EmitChar( struct TermStructure * ts, int crx )
 		}
 		else if( ts->escapestate == 2 )
 		{
+			if( crx == ';' && ts->escapestart == ']' ) //XXX This looks WRONG
+			{
+				//ESC ] ### ; For an OSC command.
+				printf("];command\n" );
+				ts->escapestate = 3;
+				ts->osc_command_place = 0;
+			}
+			else if( crx == '?' && ts->whichcsi == 0 )
+			{
+				ts->dec_priv_csi = 1;
+			}
 			//A CSI control message.
-			if( crx >= '0' && crx <= '9' )
+			else if( crx >= '0' && crx <= '9' )
 			{
 				if( ts->csistate[ts->whichcsi] < 0 ) ts->csistate[ts->whichcsi] = 0;
 				ts->csistate[ts->whichcsi] *= 10;
 				ts->csistate[ts->whichcsi] += crx - '0';
+			}
+			else if( ts->dec_priv_csi || crx == 'h' || crx =='l' )
+			{
+				ts->escapestate = 0;
+				int is_seq_default = ts->csistate[ts->whichcsi] < 0;
+				if( is_seq_default ) ts->csistate[ts->whichcsi] = 1; //Default
+
+				printf( "DEC PRIV CSI: '%c' %d %d\n", crx, ts->csistate[0], ts->csistate[1] );
+
+				int set = -1;
+				if( crx == 'c' )
+				{
+					char sto[128];
+					//int len = sprintf( sto, "\x1b[?1;2c,\"I am a VT100 with advanced video option\"\x1b\\" );
+					//FeedbackTerminal( ts, sto, len );
+				}
+				else
+				{
+					if( crx == 'h' ) set = 1;
+					else if( crx == 'l' ) set = 0;
+					if( set >= 0 )
+					{
+						int bit = ts->csistate[ts->whichcsi];
+						if( bit == 1000 )
+							bit = 30;
+						if( bit > 30 || bit < 0 )
+						{
+							fprintf( stderr, "Error: Unknown DEC Private type %d\n", bit );
+						}
+						else
+						{
+							if( set )
+								ts->dec_private_mode |= 1<<bit;
+							else
+								ts->dec_private_mode &= ~(1<<bit); 
+						}				
+					}
+					else
+					{
+						fprintf( stderr, "Error: Unknown DEC Private code ID %d (%c)\n", crx, crx );
+					}
+				}
 			}
 			else
 			{
@@ -147,54 +262,52 @@ void EmitChar( struct TermStructure * ts, int crx )
 				int is_seq_default = ts->csistate[ts->whichcsi] < 0;
 				if( is_seq_default ) ts->csistate[ts->whichcsi] = 1; //Default
 
-				//printf( "CRX: %d %d  %d %d %c\n", ts->csistate[0], ts->csistate[1], ts->curx, ts->cury, crx );
+				if( crx != ';' )
+				printf( "CRX: %d %d  %d %d %c\n", ts->csistate[0], ts->csistate[1], ts->curx, ts->cury, crx );
+
+				//This is the big list of CSI escapes.
 				switch( crx )
 				{
 				case 'F': ts->curx = 0;
 				case 'A': ts->cury -= ts->csistate[0]; if( ts->cury < 0 ) ts->cury = 0; break;
 				case 'E': ts->curx = 0;
-				case 'B': ts->cury += ts->csistate[0]; if( ts->cury >= ts->chary ) ts->cury = ts->chary - 1; break;
-				case 'C': ts->curx += ts->csistate[0]; if( ts->curx >= ts->charx ) ts->curx = ts->charx - 1; break;
+				case 'B': ts->cury += ts->csistate[0]; if( ts->cury >= ts->chary ) ts->cury = ts->chary - 1; break; //CUD—Cursor Down
+				case 'C': ts->curx += ts->csistate[0]; if( ts->curx >= ts->charx ) ts->curx = ts->charx - 1; break; //CUF—Cursor Forward
 				case 'D': ts->curx -= ts->csistate[0]; if( ts->curx < 0 ) ts->curx = 0; break;
 				case 'G': ts->curx = ts->csistate[0] - 1; if( ts->curx < 0 ) ts->curx = 0; if( ts->curx >= ts->charx ) ts->curx = ts->charx-1; break;
 				case 'd': ts->cury = ts->csistate[0] - 1; if( ts->cury < 0 ) ts->cury = 0; if( ts->cury >= ts->chary ) ts->cury = ts->chary-1; break;
-				case ';': ts->escapestate = 2; ts->csistate[1] = -1; ts->whichcsi = 1; break;
+				case ';': ts->escapestate = 2; if( ts->whichcsi < MAX_CSI_PARAMS ) { ts->whichcsi++; ts->csistate[ts->whichcsi] = -1; } break;
 				case 'f':
-				case 'H':
-					if( ts->csistate[0] < 0 ) ts->csistate[0] = 1;
-					if( ts->csistate[1] < 0 ) ts->csistate[1] = 1;
+				case 'H':	//CUP—Cursor Position
+					if( ts->csistate[0] <= 0 ) ts->csistate[0] = 1;
+					if( ts->csistate[1] <= 0 ) ts->csistate[1] = 1;
 					ts->curx = ts->csistate[1] - 1;
 					if( ts->curx < 0 ) ts->curx = 0; 
 					ts->cury = ts->csistate[0] - 1;
 					if( ts->cury < 0 ) ts->cury = 0; 
 					break;
-				case 'J':
+				case 'J':	//DECSED—Selective Erase in Display
 					{
 						int pos = ts->curx+ts->cury*ts->charx;
 						int end = ts->charx * ts->chary;
 						if( is_seq_default ) ts->csistate[0] = 0; 
 						switch( ts->csistate[0] ) 
 						{
-							case 0:
-								memset( &ts->text_buffer[pos], 0, end-pos ); break;
-							case 1:
-								memset( &ts->text_buffer[0], 0, pos ); break;
-							case 2:
-							case 3:
-								memset( &ts->text_buffer[0], 0, end ); break;
+							case 0:	BufferSet( ts, pos, 0, end-pos ); break;
+							case 1:	BufferSet( ts, 0, 0, pos ); break;
+							case 2:	case 3:
+								BufferSet( ts, 0, 0, end ); break;
 						}
+						ts->curx = 0;
 					}
 					break; 
-				case 'K':
+				case 'K':	//DECSEL—Selective Erase in Line
 					if( is_seq_default ) ts->csistate[0] = 0; 
 					switch( ts->csistate[0] )
 					{
-					case 0:
-						memset( &ts->text_buffer[ts->curx+ts->cury*ts->charx], 0, ts->charx-ts->curx ); break;
-					case 1:	
-						memset( &ts->text_buffer[ts->cury*ts->charx], 0, ts->curx ); break;
-					case 2:
-						memset( &ts->text_buffer[ts->cury*ts->charx], 0, ts->charx ); break;
+					case 0: BufferSet( ts, ts->curx+ts->cury*ts->charx, 0, ts->charx-ts->curx ); break;
+					case 1:	BufferSet( ts, ts->cury*ts->charx, 0, ts->curx ); break;
+					case 2:	BufferSet( ts, ts->cury*ts->charx, 0, ts->charx ); break;
 					}
 					break;
 				case 'L':
@@ -206,26 +319,92 @@ void EmitChar( struct TermStructure * ts, int crx )
 							for( l = ts->chary-1; l >= ts->cury+ts->csistate[0]; l-- )
 							{
 								printf( "%d %d  (Copy %d to %d)\n", ts->cury, ts->csistate[0], l-ts->csistate[0], l );
-								memcpy( &ts->text_buffer[l*ts->charx], &ts->text_buffer[(l-ts->csistate[0])*ts->charx], ts->charx );
+								BufferCopy( ts, l*ts->charx, (l-ts->csistate[0])*ts->charx, ts->charx );
 							}
-							memset( &ts->text_buffer[ts->cury*ts->charx], 0, ts->charx * ts->csistate[0] );
+							BufferSet( ts, ts->cury*ts->charx, 0, ts->charx * ts->csistate[0] );
 						}
 					}
 					break;
-				case 'P':
+				case 'P': //DCH "Delete Character" "
 					{
-						int pos = ts->curx+ts->cury*ts->charx;
-						int remain = ts->charx - ts->curx - 1;
-						if(  ts->csistate[0]  < remain ) remain =  ts->csistate[0] ;
-						memset( &ts->text_buffer[pos], 0, remain);
+						//"As characters are deleted, the remaining characters between the cursor and right margin move to the left."
+						int chars_to_del = ts->csistate[0];
+						if( ts->charx - ts->curx - 1 < chars_to_del ) chars_to_del = ts->charx - ts->curx - 1;
+						int chars_to_buff = ts->charx - chars_to_del;
+						int nr_after_shift = chars_to_buff -  chars_to_del;
+						int i;
+						int start = ts->cury*ts->charx + ts->curx;
+						//printf( "@%d END %d DEL: %d / C2B %d NRS %d\n", ts->curx, ts->charx, ts->csistate[0], chars_to_buff, nr_after_shift );
+						for( i = 0; i < chars_to_buff; i++ )
+						{
+							if( i <= nr_after_shift )
+							{
+								ts->text_buffer[start+i] = ts->text_buffer[start+i+chars_to_del];
+								ts->color_buffer[start+i] = ts->color_buffer[start+i+chars_to_del];
+								ts->attrib_buffer[start+i] = ts->attrib_buffer[start+i+chars_to_del];
+							}
+							else
+							{
+								ts->text_buffer[start+i] = 0;
+								ts->color_buffer[start+i] = ts->current_color;
+								ts->attrib_buffer[start+i] = ts->current_attributes;
+							}
+						}
 					}
 					break;
+				case 'r': //DECSTBM
+					ts->scroll_top = ts->csistate[0];
+					ts->scroll_bottom = ts->csistate[1];
+					printf( "DECSTBM: %d %d\n", ts->scroll_bottom,  ts->scroll_top );
+					ts->curx = 0;
+					ts->cury = ts->scroll_top;
+					break;
+				case 'm':
+				{
+					//SGR (set attributes)
+					int i;
+					for( i = 0; i < ts->whichcsi+1; i++ )
+					{
+						int k = ts->csistate[i];
+						if( is_seq_default ) k = 0; 
+						if( k == 0 ) { ts->current_color = 7; ts->current_attributes = 0; }
+						else if( k == 1 ) { ts->current_attributes |= 1<<0; }
+						else if( k == 2 ) { ts->current_attributes |= 1<<1; }
+						else if( k == 4 ) { ts->current_attributes |= 1<<2; }
+						else if( k == 5 ) { ts->current_attributes |= 1<<3; }
+						else if( k == 7 ) { ts->current_attributes |= 1<<4; }
+						else if( k == 21 ) { ts->current_attributes &= ~(1<<0); }
+						else if( k == 22 ) { ts->current_attributes &= ~(1<<1); }
+						else if( k == 24 ) { ts->current_attributes &= ~(1<<2); }
+						else if( k == 25 ) { ts->current_attributes &= ~(1<<3); }
+						else if( k == 26 ) { ts->current_attributes &= ~(1<<4); }
+						else if( k >= 30 && k < 37 ) { ts->current_color = (ts->current_color&0xf0) | ( k - 30 ); }
+						else if( k >= 40 && k < 47 ) { ts->current_color = (ts->current_color&0x0f) | ( ( k - 40 ) << 4 ); }
+						else if( k == 38 ) { ts->current_attributes |= 1<<4; ts->current_color = (ts->current_color&0xf0) | 7; }
+						else if( k == 39 ) { ts->current_attributes &= ~(1<<4); ts->current_color = (ts->current_color&0xf0) | 7; }
+						else if( k == 49 ) { ts->current_color = (ts->current_color&0x0f) | (0<<4); }
+					}
+					break;
+				}
 				default:
 					fprintf( stderr, "UNHANDLED CSI Esape: %c [%d]\n", crx, ts->csistate[0] );
 				}
 			}
 		}
-
+		else if( ts->escapestate == 3 )
+		{
+			//Processing ESC ] (OSC)
+			if( crx == 0x07 )
+			{
+				ts->osc_command[ts->osc_command_place] = 0;
+				printf( "Got OSC Command: %d: %s\n", ts->csistate[0], ts->osc_command );
+				ts->escapestate = 0;
+			}
+			else if( ts->osc_command_place < sizeof( ts->osc_command ) - 1 )
+			{
+				ts->osc_command[ts->osc_command_place++] = crx;
+			}
+		}
 		else if( ts->escapestate == 5 )
 		{
 			ts->escapestate ++;
@@ -237,7 +416,7 @@ void EmitChar( struct TermStructure * ts, int crx )
 	}
 	else
 	{
-		ts->text_buffer[ts->curx + ts->cury * ts->charx] = crx;
+		BufferSet( ts, ts->curx+ts->cury*ts->charx, crx, 1 );
 		ts->curx++;
 		if( ts->curx >= ts->charx ) { ts->curx = 0; ts->cury++; goto handle_newline; }
 		if( crx < 32 || crx < 0 ) printf( "CRX %d\n", (uint8_t)crx );
@@ -252,8 +431,11 @@ newline:
 	ts->curx = 0;
 	goto handle_newline;
 csi_state_start:
+	ts->escapestart = crx;
 	ts->escapestate = 2;
 	ts->csistate[0] = -1;
+	ts->csistate[1] = -1;
+	ts->dec_priv_csi = 0;
 	ts->whichcsi = 0;
 	goto end;
 handle_newline:
@@ -263,10 +445,9 @@ handle_newline:
 		int line;
 		for( line = 1; line < ts->chary; line ++)
 		{
-			memcpy( &ts->text_buffer[(line-1)*ts->charx],
-				&ts->text_buffer[(line)*ts->charx], ts->charx );
+			BufferCopy( ts, (line-1)*ts->charx, (line)*ts->charx, ts->charx );
 		}
-		memset( &ts->text_buffer[(line-1)*ts->charx], 0, ts->charx );
+		BufferSet( ts, (line-1)*ts->charx, 0, ts->charx );
 		ts->cury--;
 	}
 end:
@@ -327,6 +508,32 @@ void HandleMotion( int x, int y, int mask ) { }
 void HandleDestroy() { }
 
 
+uint32_t TermColor( uint32_t incolor, int color, int attrib )
+{
+	//XXX TODO: Do something clever here to allow for cool glyphs.
+	int actc;
+	int in_inten = (incolor&0xff) + ( (incolor&0xff00)>>8 ) + (( incolor&0xff0000 )>> 16 );
+
+	if( (in_inten > 384 ) ^ (!!(attrib&(1<<4))) )
+	{
+		actc = color & 0x0f;
+	}
+	else
+	{
+		actc = (color >> 4) & 0x0f;
+	}
+
+	int base_color = (attrib & 1)?0xff:0xaf;
+	if( attrib & 1 ) base_color = 0xff;
+
+	uint32_t outcolor = 0;// = incolor
+	if( actc & 4 ) outcolor |= base_color;
+	if( actc & 2 ) outcolor |= base_color<<8;
+	if( actc & 1 ) outcolor |= base_color<<16;
+//	if(  (attrib&(1<<4)) ) { outcolor = (in_inten > 384 )?0x0000ff:0xffff00; printf( "%d\n", actc ) ; }
+
+	return outcolor | 0xff000000;
+}
 
 int main()
 {
@@ -343,7 +550,8 @@ int main()
 
 	uint32_t * framebuffer = malloc( w * h * 4 ); 
 	uint8_t * text_buffer = ts.text_buffer = malloc( ts.charx * ts.chary );
-	unsigned char * attrib_buffer = malloc( ts.charx * ts.chary );
+	unsigned char * attrib_buffer = ts.attrib_buffer = malloc( ts.charx * ts.chary );
+	unsigned char * color_buffer  = ts.color_buffer =  malloc( ts.charx * ts.chary );
 
 	ResetTerminal( &ts );
 	sprintf( text_buffer, "Hello, world, how are you doing? 123 this is a continuation of the test.  I am going to write a lot of text here to see what can happen if I just keep typing to see where there are issues with the page breaks." );
@@ -362,7 +570,7 @@ int main()
 
 	usleep(10000);
 	write( ts.pipes[0], "script /dev/null\n", 17 );
-	write( ts.pipes[0], "export TERM=ansi\n", 17 );
+	write( ts.pipes[0], "export TERM=vt102\n", 18 );
 
 	while(1)
 	{
@@ -372,6 +580,8 @@ int main()
 		for( x = 0; x < ts.charx; x++ )
 		{
 			unsigned char c = text_buffer[x+y*ts.charx];
+			int color = ts.color_buffer[x+y*ts.charx];
+			int attrib = ts.attrib_buffer[x+y*ts.charx];
 			int cx, cy;
 			int atlasx = c & 0x0f;
 			int atlasy = c >> 4;
@@ -383,12 +593,12 @@ int main()
 			{
 				for( cx = 0; cx < font_w; cx++ )
 				{
-					fbo[cx*2+0] = fbo[cx*2+1] = start[cx];
+					fbo[cx*2+0] = fbo[cx*2+1] = TermColor( start[cx], color, attrib );
 				}
 				fbo += w;
 				for( cx = 0; cx < font_w; cx++ )
 				{
-					fbo[cx*2+0] = fbo[cx*2+1] = start[cx];
+					fbo[cx*2+0] = fbo[cx*2+1] = TermColor( start[cx], color, attrib );
 				}
 				fbo += w;
 				start += charset_w;
@@ -398,7 +608,7 @@ int main()
 			{
 				for( cx = 0; cx < font_w; cx++ )
 				{
-					fbo[cx] = start[cx];
+					fbo[cx] = TermColor( start[cx], color, attrib );
 				}
 				fbo += w;
 				start += charset_w;
