@@ -329,13 +329,13 @@ void EmitChar( struct TermStructure * ts, int crx )
 					{
 						//"As characters are deleted, the remaining characters between the cursor and right margin move to the left."
 						int chars_to_del = ts->csistate[0];
-						if( ts->charx - ts->curx - 1 < chars_to_del ) chars_to_del = ts->charx - ts->curx - 1;
-						int chars_to_buff = ts->charx - chars_to_del;
-						int nr_after_shift = chars_to_buff -  chars_to_del;
-						int i;
+						int remain_in_line = ts->charx - ts->curx;
+						if( chars_to_del > remain_in_line ) remain_in_line = remain_in_line;
 						int start = ts->cury*ts->charx + ts->curx;
-						//printf( "@%d END %d DEL: %d / C2B %d NRS %d\n", ts->curx, ts->charx, ts->csistate[0], chars_to_buff, nr_after_shift );
-						for( i = 0; i < chars_to_buff; i++ )
+						int nr_after_shift = remain_in_line - chars_to_del-1;
+						int i;
+						printf( "%d %d %d\n", chars_to_del, nr_after_shift, remain_in_line );
+						for( i = 0; i < remain_in_line; i++ )
 						{
 							if( i <= nr_after_shift )
 							{
@@ -416,9 +416,18 @@ void EmitChar( struct TermStructure * ts, int crx )
 	}
 	else
 	{
-		BufferSet( ts, ts->curx+ts->cury*ts->charx, crx, 1 );
-		ts->curx++;
-		if( ts->curx >= ts->charx ) { ts->curx = 0; ts->cury++; goto handle_newline; }
+		if( ts->dec_private_mode & 2 ) 
+		{
+			if( ts->curx > ts->charx ) { ts->curx = 0; ts->cury++; if( ts->cury >= ts->chary ) ts->cury = ts->chary-1; } 
+			BufferSet( ts, ts->curx+ts->cury*ts->charx, crx, 1 );
+			ts->curx++;
+		}
+		else
+		{
+			BufferSet( ts, ts->curx+ts->cury*ts->charx, crx, 1 );
+			ts->curx++;
+			if( ts->curx >= ts->charx ) { ts->curx = 0; ts->cury++; goto handle_newline; }
+		}
 		if( crx < 32 || crx < 0 ) printf( "CRX %d\n", (uint8_t)crx );
 	}
 
@@ -478,25 +487,52 @@ void * rxthread( void * v )
 	fprintf( stderr, "Error: Terminal pipe %d died\n", li->watchvar ); 
 	return 0;
 }
+extern int g_x_do_key_decode;
 
 void HandleKey( int keycode, int bDown )
 {
 	static int shift_held;
+	static int ctrl_held;
+	static int alt_held;
 
 	if( keycode == 65506 )
 	{
 		shift_held = bDown;
 	}
-
-	if( bDown )
+	else if( keycode == 65507 )
+	{
+		ctrl_held = bDown;
+	} 
+	else if( keycode == 65513 )
+	{
+		alt_held = bDown;
+	}
+	else if( bDown )
 	{
 		if( keycode == 65293 ) keycode = 10;
 		if( keycode == 65288 ) keycode = 8;
+		if( keycode == 65289 ) keycode = 9;
 		else if( keycode  > 255 ) {
 			fprintf( stderr, "%d\n", keycode );
 			return;
 		}
 
+		extern int g_x_global_key_state;
+		extern int g_x_global_shift_key;
+		if( (g_x_global_key_state & 2) && !(g_x_global_key_state & 2) )
+		{
+			if( keycode >= 'a' && keycode <= 'z' )
+				keycode = g_x_global_shift_key;
+		}
+		else if( g_x_global_key_state & 1 )
+		{
+			keycode = g_x_global_shift_key;
+		}
+		else if( ctrl_held && keycode >= 'a' && keycode <= 'z' )
+		{
+			keycode = keycode - 'a' + 1;
+		}
+		printf( "%d %d\n", keycode, g_x_global_shift_key );
 		char cc[1] = { keycode };
 		FeedbackTerminal( &ts, cc, 1 );
 		if( ts.echo ) EmitChar( &ts, keycode );
@@ -570,7 +606,7 @@ int main()
 
 	usleep(10000);
 	write( ts.pipes[0], "script /dev/null\n", 17 );
-	write( ts.pipes[0], "export TERM=vt102\n", 18 );
+	write( ts.pipes[0], "export TERM=linux\n", 18 );
 
 	while(1)
 	{
@@ -587,18 +623,18 @@ int main()
 			int atlasy = c >> 4;
 			uint32_t * fbo =   &framebuffer[x*font_w*(CHAR_DOUBLE+1) + y*font_h*w*(CHAR_DOUBLE+1)];
 			uint32_t * start = &font[atlasx*font_w+atlasy*font_h*charset_w];
-
+			int is_cursor = (x == ts.curx && y == ts.cury) && !(ts.dec_private_mode & 2);
 	#if CHAR_DOUBLE==1
 			for( cy = 0; cy < font_h; cy++ )
 			{
 				for( cx = 0; cx < font_w; cx++ )
 				{
-					fbo[cx*2+0] = fbo[cx*2+1] = TermColor( start[cx], color, attrib );
+					fbo[cx*2+0] = fbo[cx*2+1] = (is_cursor?0xffffffff:0)^TermColor( start[cx], color, attrib );
 				}
 				fbo += w;
 				for( cx = 0; cx < font_w; cx++ )
 				{
-					fbo[cx*2+0] = fbo[cx*2+1] = TermColor( start[cx], color, attrib );
+					fbo[cx*2+0] = fbo[cx*2+1] = (is_cursor?0xffffffff:0)^TermColor( start[cx], color, attrib );
 				}
 				fbo += w;
 				start += charset_w;
@@ -608,7 +644,7 @@ int main()
 			{
 				for( cx = 0; cx < font_w; cx++ )
 				{
-					fbo[cx] = TermColor( start[cx], color, attrib );
+					fbo[cx] = (is_cursor?0xffffffff:0)^TermColor( start[cx], color, attrib );
 				}
 				fbo += w;
 				start += charset_w;
