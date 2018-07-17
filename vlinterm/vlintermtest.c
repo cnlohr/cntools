@@ -74,6 +74,7 @@ struct TermStructure
 
 	int dec_keypad_mode;
 	int dec_private_mode;
+	int dec_mode; // ECMA-48 Mode Switches (Need to implement 4 (insert mode) as well as Auto-follow LF, VT, FF with CR (TODO)
 
 	int osc_command_place;
 	char osc_command[128];
@@ -126,7 +127,8 @@ void BufferCopy( struct TermStructure * ts, int dest, int src, int length )
 
 void ResetTerminal( struct TermStructure * ts )
 {
-	ts->dec_private_mode = 0;
+	ts->dec_private_mode = 1<<25; //Enable cursor.
+	ts->dec_mode = 0;
 
 	ts->curx = ts->cury = 0;
 	ts->echo = 0;
@@ -155,7 +157,7 @@ void EmitChar( struct TermStructure * ts, int crx )
 	else if( crx == 7 && ts->escapestate != 3 /* Make sure we're not in the OSC CSI */ ) { /*beep*/ }
 	else if( crx == 8 ) {
 		if( ts->curx ) ts->curx--;
-		BufferSet( ts, ts->curx+ts->cury*ts->charx, 0, 1 );
+		//BufferSet( ts, ts->curx+ts->cury*ts->charx, 0, 1 );
 	}
 	else if( crx == 9 ) {
 			ts->curx = (ts->curx & (~7)) + 8;
@@ -214,19 +216,21 @@ void EmitChar( struct TermStructure * ts, int crx )
 				ts->csistate[ts->whichcsi] *= 10;
 				ts->csistate[ts->whichcsi] += crx - '0';
 			}
-			else if( ts->dec_priv_csi || crx == 'h' || crx =='l' )
+			else if( ts->dec_priv_csi )
 			{
 				ts->escapestate = 0;
 				int is_seq_default = ts->csistate[ts->whichcsi] < 0;
 				if( is_seq_default ) ts->csistate[ts->whichcsi] = 1; //Default
 
-				printf( "DEC PRIV CSI: '%c' %d %d\n", crx, ts->csistate[0], ts->csistate[1] );
+				printf( "DEC PRIV CSI: '%c' %d %d / %d[%c]\n", crx, ts->csistate[0], ts->csistate[1], ts->dec_priv_csi, ts->dec_priv_csi );
 
 				int set = -1;
 				if( crx == 'c' )
 				{
-					char sto[128];
+					//What is this?!?
+					//char sto[128];
 					//int len = sprintf( sto, "\x1b[?1;2c,\"I am a VT100 with advanced video option\"\x1b\\" );
+					//int len = sprintf( sto, "\x1b[?6c:\"I am a VT102\"\\" );
 					//FeedbackTerminal( ts, sto, len );
 				}
 				else
@@ -277,6 +281,12 @@ void EmitChar( struct TermStructure * ts, int crx )
 				case 'G': ts->curx = ts->csistate[0] - 1; if( ts->curx < 0 ) ts->curx = 0; if( ts->curx >= ts->charx ) ts->curx = ts->charx-1; break;
 				case 'd': ts->cury = ts->csistate[0] - 1; if( ts->cury < 0 ) ts->cury = 0; if( ts->cury >= ts->chary ) ts->cury = ts->chary-1; break;
 				case ';': ts->escapestate = 2; if( ts->whichcsi < MAX_CSI_PARAMS ) { ts->whichcsi++; ts->csistate[ts->whichcsi] = -1; } break;
+				case 'h':
+					ts->dec_mode |= 1<<ts->csistate[0];
+					break;
+				case 'l':
+					ts->dec_mode &= ~(1<<ts->csistate[0]);
+					break;
 				case 'f':
 				case 'H':	//CUP—Cursor Position
 					if( ts->csistate[0] <= 0 ) ts->csistate[0] = 1;
@@ -318,6 +328,8 @@ void EmitChar( struct TermStructure * ts, int crx )
 						{
 							for( l = ts->chary-1; l >= ts->cury+ts->csistate[0]; l-- )
 							{
+								if( l > ts->scroll_bottom ) continue;
+								if( l < ts->scroll_top ) continue;
 								printf( "%d %d  (Copy %d to %d)\n", ts->cury, ts->csistate[0], l-ts->csistate[0], l );
 								BufferCopy( ts, l*ts->charx, (l-ts->csistate[0])*ts->charx, ts->charx );
 							}
@@ -325,6 +337,29 @@ void EmitChar( struct TermStructure * ts, int crx )
 						}
 					}
 					break;
+				case 'M': //Delete the specified number of lines.
+				{
+					//XXX TODO Pick up here.
+					if( ts->csistate[0] > 0 )
+					{
+						int lines = ts->csistate[0];
+						for( l = ts->scroll_bottom-1; l >= ts->cury+lines; l-- )
+						{
+							if( l > ts->scroll_bottom ) continue;
+							if( l < ts->scroll_top ) continue;
+							printf( "%d %d  (Copy %d to %d)\n", ts->cury, ts->csistate[0], l-ts->csistate[0], l );
+							BufferCopy( ts, l*ts->charx, (l-ts->csistate[0])*ts->charx, ts->charx );
+						}
+						BufferSet( ts, ts->cury*ts->charx, 0, ts->charx * lines );
+					}
+
+					printf( "%d %d   %d %d   %d %d   %d %d\n", ts->charx, ts->chary, ts->curx, ts->cury, ts->scroll_top, ts->scroll_bottom, lines, ts->cury-ts->scroll_bottom-lines );
+					BufferCopy( ts, ts->charx * ts->cury, ts->charx * ( ts->cury + lines ), ts->charx*(ts->scroll_bottom-ts->cury-lines) );
+					
+					ts->curx = 0;
+					break;
+				}
+
 				case 'P': //DCH "Delete Character" "
 					{
 						//"As characters are deleted, the remaining characters between the cursor and right margin move to the left."
@@ -353,8 +388,8 @@ void EmitChar( struct TermStructure * ts, int crx )
 					}
 					break;
 				case 'r': //DECSTBM
-					ts->scroll_top = ts->csistate[0];
-					ts->scroll_bottom = ts->csistate[1];
+					ts->scroll_top = ts->csistate[0]-1;
+					ts->scroll_bottom = ts->csistate[1]-1;
 					printf( "DECSTBM: %d %d\n", ts->scroll_bottom,  ts->scroll_top );
 					ts->curx = 0;
 					ts->cury = ts->scroll_top;
@@ -416,17 +451,17 @@ void EmitChar( struct TermStructure * ts, int crx )
 	}
 	else
 	{
-		if( ts->dec_private_mode & 2 ) 
+		if( ts->dec_private_mode & 2 ) //??? XXX Is this correct? 
 		{
 			if( ts->curx > ts->charx ) { ts->curx = 0; ts->cury++; if( ts->cury >= ts->chary ) ts->cury = ts->chary-1; } 
 			BufferSet( ts, ts->curx+ts->cury*ts->charx, crx, 1 );
 			ts->curx++;
 		}
-		else
+
 		{
+			if( ts->curx >= ts->charx ) { ts->curx = 0; ts->cury++; goto handle_newline; }
 			BufferSet( ts, ts->curx+ts->cury*ts->charx, crx, 1 );
 			ts->curx++;
-			if( ts->curx >= ts->charx ) { ts->curx = 0; ts->cury++; goto handle_newline; }
 		}
 		if( crx < 32 || crx < 0 ) printf( "CRX %d\n", (uint8_t)crx );
 	}
@@ -512,30 +547,48 @@ void HandleKey( int keycode, int bDown )
 		if( keycode == 65293 ) keycode = 10;
 		if( keycode == 65288 ) keycode = 8;
 		if( keycode == 65289 ) keycode = 9;
+		if( keycode == 65362 ) //Up
+		{			char cc[] = { 0x1b, '[', 'A' };	FeedbackTerminal( &ts, cc, 3 );		}
+		else if( keycode == 65364 ) //Down
+		{			char cc[] = { 0x1b, '[', 'B' };	FeedbackTerminal( &ts, cc, 3 );		}
+		else if( keycode == 65361 ) //Left
+		{			char cc[] = { 0x1b, '[', 'D' };	FeedbackTerminal( &ts, cc, 3 );		}
+		else if( keycode == 65363 ) //Right
+		{			char cc[] = { 0x1b, '[', 'C' };	FeedbackTerminal( &ts, cc, 3 );		}
+		else if( keycode == 65366 ) //PgDn
+		{			char cc[] = { 0x1b, '[', '6', '~' };	FeedbackTerminal( &ts, cc, 4 );		}
+		else if( keycode == 65365 ) //PgUp
+		{			char cc[] = { 0x1b, '[', '5', '~' };	FeedbackTerminal( &ts, cc, 4 );		}
+		else if( keycode == 65367 ) //Home
+		{			char cc[] = { 0x1b, '[', 'F' };	FeedbackTerminal( &ts, cc, 3 );		}
+		else if( keycode == 65360 ) //End
+		{			char cc[] = { 0x1b, '[', 'H' };	FeedbackTerminal( &ts, cc, 3 );		}
 		else if( keycode  > 255 ) {
 			fprintf( stderr, "%d\n", keycode );
 			return;
 		}
-
-		extern int g_x_global_key_state;
-		extern int g_x_global_shift_key;
-		if( (g_x_global_key_state & 2) && !(g_x_global_key_state & 2) )
+		else
 		{
-			if( keycode >= 'a' && keycode <= 'z' )
+			extern int g_x_global_key_state;
+			extern int g_x_global_shift_key;
+			if( (g_x_global_key_state & 2) && !(g_x_global_key_state & 2) )
+			{
+				if( keycode >= 'a' && keycode <= 'z' )
+					keycode = g_x_global_shift_key;
+			}
+			else if( g_x_global_key_state & 1 )
+			{
 				keycode = g_x_global_shift_key;
+			}
+			else if( ctrl_held && keycode >= 'a' && keycode <= 'z' )
+			{
+				keycode = keycode - 'a' + 1;
+			}
+			printf( "%d %d\n", keycode, g_x_global_shift_key );
+			char cc[1] = { keycode };
+			FeedbackTerminal( &ts, cc, 1 );
+			if( ts.echo ) EmitChar( &ts, keycode );
 		}
-		else if( g_x_global_key_state & 1 )
-		{
-			keycode = g_x_global_shift_key;
-		}
-		else if( ctrl_held && keycode >= 'a' && keycode <= 'z' )
-		{
-			keycode = keycode - 'a' + 1;
-		}
-		printf( "%d %d\n", keycode, g_x_global_shift_key );
-		char cc[1] = { keycode };
-		FeedbackTerminal( &ts, cc, 1 );
-		if( ts.echo ) EmitChar( &ts, keycode );
 	}
 }
 
@@ -623,7 +676,7 @@ int main()
 			int atlasy = c >> 4;
 			uint32_t * fbo =   &framebuffer[x*font_w*(CHAR_DOUBLE+1) + y*font_h*w*(CHAR_DOUBLE+1)];
 			uint32_t * start = &font[atlasx*font_w+atlasy*font_h*charset_w];
-			int is_cursor = (x == ts.curx && y == ts.cury) && !(ts.dec_private_mode & 2);
+			int is_cursor = (x == ts.curx && y == ts.cury) && (ts.dec_private_mode & (1<<25));
 	#if CHAR_DOUBLE==1
 			for( cy = 0; cy < font_h; cy++ )
 			{
