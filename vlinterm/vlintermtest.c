@@ -124,7 +124,7 @@ void HandleKey( int keycode, int bDown )
 		else if( keycode == 65360 ) //End
 		{			char cc[] = { 0x1b, '[', 'H' };	FeedbackTerminal( &ts, cc, 3 );		}
 		else if( keycode  > 255 ) {
-			fprintf( stderr, "%d\n", keycode );
+			//fprintf( stderr, "%d\n", keycode );
 			return;
 		}
 		else
@@ -144,7 +144,7 @@ void HandleKey( int keycode, int bDown )
 			{
 				keycode = keycode - 'a' + 1;
 			}
-			printf( "%d %d\n", keycode, g_x_global_shift_key );
+			//printf( "%d %d\n", keycode, g_x_global_shift_key );
 			char cc[1] = { keycode };
 			FeedbackTerminal( &ts, cc, 1 );
 			if( ts.echo ) EmitChar( &ts, keycode );
@@ -203,8 +203,6 @@ int main()
 	unsigned char * color_buffer  = ts.color_buffer =  malloc( ts.charx * ts.chary );
 
 	ResetTerminal( &ts );
-	sprintf( text_buffer, "Hello, world, how are you doing? 123 this is a continuation of the test.  I am going to write a lot of text here to see what can happen if I just keep typing to see where there are issues with the page breaks." );
-
 
 	char * localargv[] = { "/bin/bash", 0 };
 	spawn_process_with_pipes( "/bin/bash", localargv, ts.pipes );
