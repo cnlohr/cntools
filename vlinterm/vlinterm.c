@@ -99,7 +99,7 @@ void EmitChar( struct TermStructure * ts, int crx )
 				//case '%':
 				//case '(': ts->escapestate = 5; break;
 				default: 
-					fprintf( stderr, "UNHANDLED Esape: %c\n", crx );
+					fprintf( stderr, "UNHANDLED Esape: %c %d\n", crx, ts->whichcsi, ts->csistate[0] );
 					break;
 			}
 		}
