@@ -342,6 +342,7 @@ void EmitChar( struct TermStructure * ts, int crx )
 					//XXX TODO Pick up here.
 					if( ts->csistate[0] > 0 )
 					{
+						int l;
 						int lines = ts->csistate[0];
 						for( l = ts->scroll_bottom-1; l >= ts->cury+lines; l-- )
 						{
@@ -351,10 +352,10 @@ void EmitChar( struct TermStructure * ts, int crx )
 							BufferCopy( ts, l*ts->charx, (l-ts->csistate[0])*ts->charx, ts->charx );
 						}
 						BufferSet( ts, ts->cury*ts->charx, 0, ts->charx * lines );
-					}
 
-					printf( "%d %d   %d %d   %d %d   %d %d\n", ts->charx, ts->chary, ts->curx, ts->cury, ts->scroll_top, ts->scroll_bottom, lines, ts->cury-ts->scroll_bottom-lines );
-					BufferCopy( ts, ts->charx * ts->cury, ts->charx * ( ts->cury + lines ), ts->charx*(ts->scroll_bottom-ts->cury-lines) );
+						printf( "%d %d   %d %d   %d %d   %d %d\n", ts->charx, ts->chary, ts->curx, ts->cury, ts->scroll_top, ts->scroll_bottom, lines, ts->cury-ts->scroll_bottom-lines );
+//						BufferCopy( ts, ts->charx * ts->cury, ts->charx * ( ts->cury + lines ), ts->charx*(ts->scroll_bottom-ts->cury-lines) );
+					}
 					
 					ts->curx = 0;
 					break;
