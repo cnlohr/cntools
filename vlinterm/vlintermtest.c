@@ -10,8 +10,8 @@
 
 int spawn_process_with_pipes( const char * execparam, char * const argv[], int pipefd[3] );
 
-#define INIT_CHARX  80
-#define INIT_CHARY  25
+#define INIT_CHARX  100
+#define INIT_CHARY  50
 #define CHAR_DOUBLE 0   //Set to 1 to double size, or 0 for normal size.
 
 int charset_w, charset_h, font_w, font_h;
@@ -27,7 +27,7 @@ int LoadFont(const char * fontfile)
 	if( (c = fgetc(f)) != 'P' ) { fprintf( stderr, "Error: Cannot parse first line of font file [%d].\n", c ); return -2; } 
 	format = fgetc(f);
 	fgetc(f);
-	while( (c = getc(f)) != EOF ) { printf( "%c", c ); if( c == '\n' ) break; }	//Comment
+	while( (c = getc(f)) != EOF ) { if( c == '\n' ) break; }	//Comment
 	if( fscanf( f, "%d %d\n", &charset_w, &charset_h ) != 2 ) { fprintf( stderr, "Error: No size in pgm.\n" ); return -3; }
 	while( (c = getc(f)) != EOF ) if( c == '\n' ) break;	//255
 	if( (charset_w & 0x0f) || (charset_h & 0x0f) ) { fprintf( stderr, "Error: charset must be divisible by 16 in both dimensions.\n" ); return -4; }
@@ -104,30 +104,39 @@ void HandleKey( int keycode, int bDown )
 	}
 	else if( bDown )
 	{
-		if( keycode == 65293 ) keycode = 10;
-		if( keycode == 65288 ) keycode = 8;
-		if( keycode == 65289 ) keycode = 9;
-		if( keycode == 65362 ) //Up
-		{			char cc[] = { 0x1b, '[', 'A' };	FeedbackTerminal( &ts, cc, 3 );		}
-		else if( keycode == 65364 ) //Down
-		{			char cc[] = { 0x1b, '[', 'B' };	FeedbackTerminal( &ts, cc, 3 );		}
-		else if( keycode == 65361 ) //Left
-		{			char cc[] = { 0x1b, '[', 'D' };	FeedbackTerminal( &ts, cc, 3 );		}
-		else if( keycode == 65363 ) //Right
-		{			char cc[] = { 0x1b, '[', 'C' };	FeedbackTerminal( &ts, cc, 3 );		}
-		else if( keycode == 65366 ) //PgDn
-		{			char cc[] = { 0x1b, '[', '6', '~' };	FeedbackTerminal( &ts, cc, 4 );		}
-		else if( keycode == 65365 ) //PgUp
-		{			char cc[] = { 0x1b, '[', '5', '~' };	FeedbackTerminal( &ts, cc, 4 );		}
-		else if( keycode == 65367 ) //Home
-		{			char cc[] = { 0x1b, '[', 'F' };	FeedbackTerminal( &ts, cc, 3 );		}
-		else if( keycode == 65360 ) //End
-		{			char cc[] = { 0x1b, '[', 'H' };	FeedbackTerminal( &ts, cc, 3 );		}
-		else if( keycode  > 255 ) {
-			//fprintf( stderr, "%d\n", keycode );
-			return;
-		}
-		else
+		printf( "KEYCODE: %d\n", keycode );
+		if( keycode >= 255 )
+		{
+			struct KeyLooup
+			{
+				unsigned short key;
+				short stringlen;
+				const char * string;
+			} keys[] = {
+				{ 65293, 1, "\r" },
+				{ 65288, 1, "\x08" },
+				{ 65289, 1, "\x09" },
+				{ 65362, 3, "\x1b[A" }, //Up
+				{ 65364, 3, "\x1b[B" }, //Down
+				{ 65361, 3, "\x1b[D" }, //Left
+				{ 65363, 3, "\x1b[C" }, //Right
+				{ 65366, 4, "\x1b[6~" }, //PgDn
+				{ 65365, 4, "\x1b[5~" }, //PgUp
+				{ 65367, 3, "\x1b[F" }, //Home
+				{ 65360, 3, "\x1b[H" }, //End
+				{ 255, 0, "" },
+			};
+			int i;
+			for( i = 0; i < sizeof(keys)/sizeof(keys[0]); i++ )
+			{
+				if( keys[i].key == keycode )
+				{
+					FeedbackTerminal( &ts, keys[i].string, keys[i].stringlen );
+					break;
+				}
+			}
+			if( i == sizeof(keys)/sizeof(keys[0]) ) fprintf( stderr, "Unmapped key %d\n", keycode );
+		} else
 		{
 			extern int g_x_global_key_state;
 			extern int g_x_global_shift_key;
@@ -216,7 +225,7 @@ int main()
 	OGCreateThread( rxthread, (void*)&ts.lis[1] );
 
 	usleep(10000);
-	FeedbackTerminal( &ts, "script /dev/null\n", 17 );
+//	FeedbackTerminal( &ts, "script /dev/null\n", 17 );
 	FeedbackTerminal( &ts, "export TERM=linux\n", 18 );
 
 	while(1)
@@ -291,35 +300,30 @@ int main()
 int spawn_process_with_pipes( const char * execparam, char * const argv[], int pipefd[3] )
 {
 	int pipeset[6];
-  
-	if( pipe(&pipeset[0]) ) return -1;
-	if( pipe(&pipeset[2]) ) return -2;
-	if( pipe(&pipeset[4]) ) return -3;
-	
+
+	int r = getpt();
+	grantpt(r);
+	unlockpt( r );
+	char slavepath[64];
+	if(ptsname_r(r, slavepath, sizeof(slavepath)) < 0)
+	{
+		perror("ptsname_r");
+		exit(1);
+	}
+
 	int rforkv = fork();
 	if (rforkv == 0)
 	{
-		// child
-		close( pipeset[1] );
-		close( pipeset[2] );
-		close( pipeset[4] );
-		dup2(pipeset[0], 0);
-		dup2(pipeset[3], 1);
-		dup2(pipeset[5], 2);
-		close( pipeset[0] );
-		close( pipeset[3] );
-		close( pipeset[5] );
+		int r = open( slavepath, O_RDWR | O_NOCTTY );
+		dup2( r, 0 );
+		dup2( r, 1 );
+		dup2( r, 2 );
+		dup2( r, 255 );
 		execvp( execparam, argv );
 	}
 	else
 	{
-		// parent
-		pipefd[0] = pipeset[1];
-		pipefd[1] = pipeset[2];
-		pipefd[2] = pipeset[4];
-		close( pipeset[0] );
-		close( pipeset[3] );
-		close( pipeset[5] );
+		pipefd[0] = pipefd[1] = pipefd[2] = r;
 		return rforkv;
 	}
 }

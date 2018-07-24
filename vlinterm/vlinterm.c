@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <string.h>
 
+//#define DEBUG_VLINTERM
+
 void BufferSet( struct TermStructure * ts, int start, int value, int length )
 {
 	int valuec = ts->current_color;
@@ -22,14 +24,50 @@ void BufferSet( struct TermStructure * ts, int start, int value, int length )
 
 void BufferCopy( struct TermStructure * ts, int dest, int src, int length )
 {
-	if( src < 0 ) { fprintf( stderr, "invalid buffer copy [0]\n" ); } 
-	if( dest < 0 ) { fprintf( stderr, "invalid buffer copy [1]\n" ); } 
-	if( src + length > ts->charx*ts->chary ) { fprintf( stderr, "invalid buffer copy [2]\n" ); } 
-	if( dest + length > ts->charx*ts->chary ) { fprintf( stderr, "invalid buffer copy [3]\n" ); } 
+	if( src < 0 ) { 
+#ifdef DEBUG_VLINTERM
+		fprintf( stderr, "invalid buffer copy [0]\n" );
+#endif
+		return;
+	} 
+	if( dest < 0 ) {
+#ifdef DEBUG_VLINTERM
+		fprintf( stderr, "invalid buffer copy [1]\n" ); 
+#endif
+		return;
+	} 
+	if( src + length > ts->charx*ts->chary )
+	{
+#ifdef DEBUG_VLINTERM
+		fprintf( stderr, "invalid buffer copy [2]\n" );
+#endif
+		return;
+	} 
+	if( dest + length > ts->charx*ts->chary ) {
+#ifdef DEBUG_VLINTERM
+		fprintf( stderr, "invalid buffer copy [3]\n" );
+#endif
+		return;
+	} 
 
-	memcpy( ts->text_buffer + dest,   ts->text_buffer + src, length );
-	memcpy( ts->attrib_buffer + dest, ts->attrib_buffer + src, length );
-	memcpy( ts->color_buffer + dest,  ts->color_buffer + src, length );
+	//Detect if we have overlapping regions, if so we must use a temporary buffer.
+	if( ( dest > src && src + length >= dest ) ||
+		( src > dest && dest + length >= src ) )
+	{
+		char temp[length];
+		memcpy( temp,   ts->text_buffer + src, length );	
+		memcpy( ts->text_buffer + dest, temp, length );	
+		memcpy( temp,   ts->attrib_buffer + src, length );	
+		memcpy( ts->attrib_buffer + dest, temp, length );	
+		memcpy( temp,   ts->color_buffer + src, length );	
+		memcpy( ts->color_buffer + dest, temp, length );	
+	}
+	else
+	{
+		memcpy( ts->text_buffer + dest,   ts->text_buffer + src, length );
+		memcpy( ts->attrib_buffer + dest, ts->attrib_buffer + src, length );
+		memcpy( ts->color_buffer + dest,  ts->color_buffer + src, length );
+	}
 }
 
 void ResetTerminal( struct TermStructure * ts )
@@ -55,9 +93,25 @@ int FeedbackTerminal( struct TermStructure * ts, uint8_t * data, int len )
 	return write( ts->pipes[0], data, len );
 }
 
+void HandleNewline( struct TermStructure * ts )
+{ 
+	if( ts->cury >= ts->chary )
+	{
+		//Must handle scrolling the screen up;
+		int line;
+		BufferCopy( ts, 0, ts->charx, (ts->chary-1)*ts->charx );
+		BufferSet( ts, (ts->chary-1)*ts->charx, 0, ts->charx );
+		ts->cury--;
+	}
+}
+
 void EmitChar( struct TermStructure * ts, int crx )
 {
-//	fprintf( stderr, "(%d %d %c)", crx, ts->curx, crx );
+
+#ifdef DEBUG_VLINTERM
+	//fprintf( stderr, "(%d %d %c)", crx, ts->curx, crx );
+#endif
+
 	OGLockMutex( ts->screen_mutex );
 	if( crx == '\r' ) { goto linefeed; }
 	else if( crx == '\n' ) { goto newline; }
@@ -87,7 +141,16 @@ void EmitChar( struct TermStructure * ts, int crx )
 				case 'D': goto linefeed;
 				case 'E': goto newline;
 				//case 'H': break; //Set tabstop
-				case 'M': if( ts->cury ) ts->cury--; break;
+				case 'M':
+					ts->cury--;
+					if( ts->cury < 0 )
+					{
+						int i;
+						BufferCopy( ts, ts->charx, 0, ts->charx * (ts->chary-1) );
+						BufferSet( ts, 0, 0, ts->charx );
+						ts->cury = 0;
+					} 
+					break;
 				//case 'Z': FeedbackTerminal( ts, "\x1b[?6c", 5 ); break;
 				case '7': ts->savex = ts->curx; ts->savey = ts->cury; break;
 				case '8': ts->curx = ts->savex; ts->cury = ts->savey; break;
@@ -99,7 +162,9 @@ void EmitChar( struct TermStructure * ts, int crx )
 				//case '%':
 				//case '(': ts->escapestate = 5; break;
 				default: 
+#ifdef DEBUG_VLINTERM
 					fprintf( stderr, "UNHANDLED Esape: %c %d\n", crx, ts->whichcsi, ts->csistate[0] );
+#endif
 					break;
 			}
 		}
@@ -108,7 +173,9 @@ void EmitChar( struct TermStructure * ts, int crx )
 			if( crx == ';' && ts->escapestart == ']' ) //XXX This looks WRONG
 			{
 				//ESC ] ### ; For an OSC command.
+#ifdef DEBUG_VLINTERM
 				printf("];command\n" );
+#endif
 				ts->escapestate = 3;
 				ts->osc_command_place = 0;
 			}
@@ -129,11 +196,15 @@ void EmitChar( struct TermStructure * ts, int crx )
 				int is_seq_default = ts->csistate[ts->whichcsi] < 0;
 				if( is_seq_default ) ts->csistate[ts->whichcsi] = 1; //Default
 
-				//printf( "DEC PRIV CSI: '%c' %d %d / %d[%c]\n", crx, ts->csistate[0], ts->csistate[1], ts->dec_priv_csi, ts->dec_priv_csi );
-
+#ifdef DEBUG_VLINTERM
+				printf( "DEC PRIV CSI: '%c' %d %d / %d[%c]\n", crx, ts->csistate[0], ts->csistate[1], ts->dec_priv_csi, ts->dec_priv_csi );
+#endif
 				int set = -1;
 				if( crx == 'c' )
 				{
+#ifdef DEBUG_VLINTERM
+					printf( "Got a private [?c - not sure what to do with it.\n" );
+#endif
 					//What is this?!?
 					//char sto[128];
 					//int len = sprintf( sto, "\x1b[?1;2c,\"I am a VT100 with advanced video option\"\x1b\\" );
@@ -151,7 +222,9 @@ void EmitChar( struct TermStructure * ts, int crx )
 							bit = 30;
 						if( bit > 30 || bit < 0 )
 						{
+#ifdef DEBUG_VLINTERM
 							fprintf( stderr, "Error: Unknown DEC Private type %d\n", bit );
+#endif
 						}
 						else
 						{
@@ -163,7 +236,9 @@ void EmitChar( struct TermStructure * ts, int crx )
 					}
 					else
 					{
+#ifdef DEBUG_VLINTERM
 						fprintf( stderr, "Error: Unknown DEC Private code ID %d (%c)\n", crx, crx );
+#endif
 					}
 				}
 			}
@@ -173,36 +248,39 @@ void EmitChar( struct TermStructure * ts, int crx )
 				int is_seq_default = ts->csistate[ts->whichcsi] < 0;
 				if( is_seq_default ) ts->csistate[ts->whichcsi] = 1; //Default
 
-				//if( crx != ';' ) printf( "CRX: %d %d  %d %d %c\n", ts->csistate[0], ts->csistate[1], ts->curx, ts->cury, crx );
-
+#ifdef DEBUG_VLINTERM
+				if( crx != ';' ) printf( "CRX: %d %d  %d %d %c\n", ts->csistate[0], ts->csistate[1], ts->curx, ts->cury, crx );
+#endif
 				//This is the big list of CSI escapes.
 				switch( crx )
 				{
+				case '@': 
+				{
+					//Insert specified # of characters.
+					int chars = ts->csistate[0];
+					BufferCopy( ts, ts->charx*ts->cury, ts->charx*ts->cury-chars, chars );
+					BufferSet( ts, ts->charx*ts->cury + ts->charx, 0, chars ); 
+					break;
+				}
 				case 'F': ts->curx = 0;
-				case 'A': ts->cury -= ts->csistate[0]; if( ts->cury < 0 ) ts->cury = 0; break;
+				case 'A': ts->cury -= ts->csistate[0]; break;
 				case 'E': ts->curx = 0;
-				case 'B': ts->cury += ts->csistate[0]; if( ts->cury >= ts->chary ) ts->cury = ts->chary - 1; break; //CUD—Cursor Down
-				case 'C': ts->curx += ts->csistate[0]; if( ts->curx >= ts->charx ) ts->curx = ts->charx - 1; break; //CUF—Cursor Forward
-				case 'D': ts->curx -= ts->csistate[0]; if( ts->curx < 0 ) ts->curx = 0; break;
-				case 'G': ts->curx = ts->csistate[0] - 1; if( ts->curx < 0 ) ts->curx = 0; if( ts->curx >= ts->charx ) ts->curx = ts->charx-1; break;
-				case 'd': ts->cury = ts->csistate[0] - 1; if( ts->cury < 0 ) ts->cury = 0; if( ts->cury >= ts->chary ) ts->cury = ts->chary-1; break;
+				case 'B': ts->cury += ts->csistate[0]; break; //CUD—Cursor Down
+				case 'C': ts->curx += ts->csistate[0]; break; //CUF—Cursor Forward
+				case 'D': ts->curx -= ts->csistate[0]; ts->curx = 0; break;
+				case 'G': ts->curx = ts->csistate[0] - 1; break;
+				case 'd': ts->cury = ts->csistate[0] - 1; break;
 				case ';': ts->escapestate = 2; if( ts->whichcsi < MAX_CSI_PARAMS ) { ts->whichcsi++; ts->csistate[ts->whichcsi] = -1; } break;
-				case 'h':
-					ts->dec_mode |= 1<<ts->csistate[0];
-					break;
-				case 'l':
-					ts->dec_mode &= ~(1<<ts->csistate[0]);
-					break;
+				case 'h': ts->dec_mode |= 1<<ts->csistate[0]; break;
+				case 'l': ts->dec_mode &= ~(1<<ts->csistate[0]); break;
 				case 'f':
-				case 'H':	//CUP—Cursor Position
+				case 'H':	//CUP - Cursor Position
 					if( ts->csistate[0] <= 0 ) ts->csistate[0] = 1;
 					if( ts->csistate[1] <= 0 ) ts->csistate[1] = 1;
 					ts->curx = ts->csistate[1] - 1;
-					if( ts->curx < 0 ) ts->curx = 0; 
 					ts->cury = ts->csistate[0] - 1;
-					if( ts->cury < 0 ) ts->cury = 0; 
 					break;
-				case 'J':	//DECSED—Selective Erase in Display
+				case 'J':	//DECSED - Selective Erase in Display
 					{
 						int pos = ts->curx+ts->cury*ts->charx;
 						int end = ts->charx * ts->chary;
@@ -217,7 +295,7 @@ void EmitChar( struct TermStructure * ts, int crx )
 						ts->curx = 0;
 					}
 					break; 
-				case 'K':	//DECSEL—Selective Erase in Line
+				case 'K':	//DECSEL - Selective Erase in Line
 					if( is_seq_default ) ts->csistate[0] = 0; 
 					switch( ts->csistate[0] )
 					{
@@ -226,37 +304,31 @@ void EmitChar( struct TermStructure * ts, int crx )
 					case 2:	BufferSet( ts, ts->cury*ts->charx, 0, ts->charx ); break;
 					}
 					break;
-				case 'L':
-					//Inset blank lines.  //XXX TODO: Double-check edge cases.
+				case 'L': //Inset blank lines.
 					{
-						int l;
-						if( ts->csistate[0] > 0 )
+						int l = ts->csistate[0];
+						if( l > ts->chary - ts->cury ) l = ts->chary - ts->cury;
+						if( l > 0 )
 						{
-							for( l = ts->chary-1; l >= ts->cury+ts->csistate[0]; l-- )
-							{
-								if( l > ts->scroll_bottom ) continue;
-								if( l < ts->scroll_top ) continue;
-								BufferCopy( ts, l*ts->charx, (l-ts->csistate[0])*ts->charx, ts->charx );
-							}
-							BufferSet( ts, ts->cury*ts->charx, 0, ts->charx * ts->csistate[0] );
+							BufferCopy( ts, (l+ts->cury)*ts->charx, ts->cury*ts->charx, ts->charx * l );
+							BufferSet( ts, ts->cury*ts->charx, 0, ts->charx * l );
 						}
 					}
 					break;
 				case 'M': //Delete the specified number of lines.
-				{	//XXX TODO: Double-check edge cases.
+				{
 					if( ts->csistate[0] > 0 )
 					{
-						int l;
 						int lines = ts->csistate[0];
-						for( l = ts->cury; l < ts->scroll_bottom - lines; l++ )
+						int startcopy = ts->cury;
+						int stopcopy = ts->scroll_bottom - lines;
+						if( startcopy < ts->scroll_top ) startcopy = ts->scroll_top;						
+						if( stopcopy > startcopy )
 						{
-							if( l > ts->scroll_bottom ) continue;
-							if( l < ts->scroll_top ) continue;
-							BufferCopy( ts, l*ts->charx, (l+lines)*ts->charx, ts->charx );
+							BufferCopy( ts, startcopy*ts->charx, (lines+startcopy)*ts->charx, ts->charx*(stopcopy-startcopy) );
+							BufferSet( ts, stopcopy*ts->charx, 0, ts->charx * lines );
 						}
-						BufferSet( ts, l*ts->charx, 0, ts->charx * lines );
 					}
-					
 					ts->curx = 0;
 					break;
 				}
@@ -271,21 +343,8 @@ void EmitChar( struct TermStructure * ts, int crx )
 						int nr_after_shift = remain_in_line - chars_to_del-1;
 						int i;
 
-						for( i = 0; i < remain_in_line; i++ )
-						{
-							if( i <= nr_after_shift )
-							{
-								ts->text_buffer[start+i] = ts->text_buffer[start+i+chars_to_del];
-								ts->color_buffer[start+i] = ts->color_buffer[start+i+chars_to_del];
-								ts->attrib_buffer[start+i] = ts->attrib_buffer[start+i+chars_to_del];
-							}
-							else
-							{
-								ts->text_buffer[start+i] = 0;
-								ts->color_buffer[start+i] = ts->current_color;
-								ts->attrib_buffer[start+i] = ts->current_attributes;
-							}
-						}
+						BufferCopy( ts, start, start+i+chars_to_del, nr_after_shift+1 );
+						BufferSet( ts, start+nr_after_shift, 0, remain_in_line-nr_after_shift );
 					}
 					break;
 				case 'r': //DECSTBM
@@ -312,7 +371,7 @@ void EmitChar( struct TermStructure * ts, int crx )
 						else if( k == 22 ) { ts->current_attributes &= ~(1<<1); }
 						else if( k == 24 ) { ts->current_attributes &= ~(1<<2); }
 						else if( k == 25 ) { ts->current_attributes &= ~(1<<3); }
-						else if( k == 26 ) { ts->current_attributes &= ~(1<<4); }
+						else if( k == 27 ) { ts->current_attributes &= ~(1<<4); }
 						else if( k >= 30 && k < 37 ) { ts->current_color = (ts->current_color&0xf0) | ( k - 30 ); }
 						else if( k >= 40 && k < 47 ) { ts->current_color = (ts->current_color&0x0f) | ( ( k - 40 ) << 4 ); }
 						else if( k == 38 ) { ts->current_attributes |= 1<<4; ts->current_color = (ts->current_color&0xf0) | 7; }
@@ -322,7 +381,10 @@ void EmitChar( struct TermStructure * ts, int crx )
 					break;
 				}
 				default:
+#ifdef DEBUG_VLINTERM
 					fprintf( stderr, "UNHANDLED CSI Esape: %c [%d]\n", crx, ts->csistate[0] );
+#endif
+					break;
 				}
 			}
 		}
@@ -348,32 +410,45 @@ void EmitChar( struct TermStructure * ts, int crx )
 		{
 			ts->escapestate = 0;
 		}
+
+		if( ts->cury < 0 ) ts->cury = 0;
+		if( ts->curx < 0 ) ts->curx = 0;
+		if( ts->cury >= ts->chary ) ts->cury = ts->chary-1;
+		if( ts->curx >= ts->charx ) ts->curx = ts->charx-1;
 	}
 	else
 	{
+		//No escape sequenc.  Just handle the character.
+
 		if( ts->dec_private_mode & 2 ) //??? XXX Is this correct? 
 		{
-			if( ts->curx > ts->charx ) { ts->curx = 0; ts->cury++; if( ts->cury >= ts->chary ) ts->cury = ts->chary-1; } 
+			if( ts->curx >= ts->charx ) { ts->curx = 0; ts->cury++; if( ts->cury >= ts->chary ) ts->cury = ts->chary-1; } 
 			BufferSet( ts, ts->curx+ts->cury*ts->charx, crx, 1 );
 			ts->curx++;
 		}
-
+		else
 		{
-			if( ts->curx >= ts->charx ) { ts->curx = 0; ts->cury++; goto handle_newline; }
+			if( ts->curx >= ts->charx ) { ts->curx = 0; ts->cury++; HandleNewline( ts ); }
 			BufferSet( ts, ts->curx+ts->cury*ts->charx, crx, 1 );
 			ts->curx++;
 		}
-		//if( crx < 32 || crx < 0 ) printf( "CRX %d\n", (uint8_t)crx );
+#ifdef DEBUG_VLINTERM
+		if( crx < 32 || crx < 0 ) printf( "CRX %d\n", (uint8_t)crx );
+#endif
 	}
 
 	goto end;
 linefeed:
 	ts->curx = 0;
-	goto handle_newline;
+	HandleNewline( ts);
+	goto end;
+
 newline:
 	ts->cury ++;
 	ts->curx = 0;
-	goto handle_newline;
+	HandleNewline( ts );
+	goto end;
+
 csi_state_start:
 	ts->escapestart = crx;
 	ts->escapestate = 2;
@@ -382,18 +457,6 @@ csi_state_start:
 	ts->dec_priv_csi = 0;
 	ts->whichcsi = 0;
 	goto end;
-handle_newline:
-	if( ts->cury >= ts->chary )
-	{
-		//Must handle scrolling the screen up;
-		int line;
-		for( line = 1; line < ts->chary; line ++)
-		{
-			BufferCopy( ts, (line-1)*ts->charx, (line)*ts->charx, ts->charx );
-		}
-		BufferSet( ts, (line-1)*ts->charx, 0, ts->charx );
-		ts->cury--;
-	}
 end:
 	OGUnlockMutex( ts->screen_mutex );
 }
