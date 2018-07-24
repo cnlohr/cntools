@@ -194,6 +194,7 @@ void HandleKey( int keycode, int bDown )
 					keycode = 0x1d;
 				}
 			}
+			cc[0] = keycode;
 			str = cc;
 			len = 1;
 		}
