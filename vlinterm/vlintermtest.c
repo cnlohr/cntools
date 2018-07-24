@@ -1,17 +1,21 @@
-#include <CNFGFunctions.h>
+#define _GNU_SOURCE
 #include <stdlib.h>
+#include <CNFGFunctions.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <os_generic.h>
 #include <string.h>
 #include <fcntl.h>
-
+#include <sys/ioctl.h>
+#include <signal.h>
+#include <termios.h>
+#include <errno.h>
 #include "vlinterm.h"
 
-int spawn_process_with_pipes( const char * execparam, char * const argv[], int pipefd[3] );
+int spawn_process_with_pts( const char * execparam, char * const argv[], int * pid );
 
-#define INIT_CHARX  100
-#define INIT_CHARY  50
+#define INIT_CHARX  80
+#define INIT_CHARY  25
 #define CHAR_DOUBLE 0   //Set to 1 to double size, or 0 for normal size.
 
 int charset_w, charset_h, font_w, font_h;
@@ -46,6 +50,7 @@ int LoadFont(const char * fontfile)
 	}
 	font_w = charset_w / 16;
 	font_h = charset_h / 16;
+	fclose( f );
 
 	return 0;
 }
@@ -56,13 +61,12 @@ struct TermStructure ts;
 
 void * rxthread( void * v )
 {
-	struct LaunchInfo * li = (struct LaunchInfo*)v; 
-	struct TermStructure * ts = li->ts;
+	struct TermStructure * ts = v;
 
     while( 1 )
 	{
 		uint8_t rxdata[1024+1];
-		int rx = read( ts->pipes[li->watchvar], rxdata, 1024 );
+		int rx = read( ts->ptspipe, rxdata, 1024 );
 		if( rx < 0 ) break;
 		int i;
 		for( i = 0; i < rx; i++ )
@@ -71,7 +75,9 @@ void * rxthread( void * v )
 			EmitChar( ts, crx );
 		}
 	}
-	fprintf( stderr, "Error: Terminal pipe %d died\n", li->watchvar ); 
+	fprintf( stderr, "Error: Terminal pipe died\n" ); 
+	close( ts->ptspipe );
+	exit( 0 );
 	return 0;
 }
 
@@ -79,6 +85,11 @@ void * rxthread( void * v )
 void HandleOSCCommand( struct TermStructure * ts, int parameter, const char * value )
 {
 	printf( "OSC Command: %d: %s\n", parameter, value );
+}
+
+void HandleBell( struct TermStructure * ts )
+{
+	printf( "BELL\n" );
 }
 
 
@@ -116,14 +127,16 @@ void HandleKey( int keycode, int bDown )
 				{ 65293, 1, "\r" },
 				{ 65288, 1, "\x08" },
 				{ 65289, 1, "\x09" },
-				{ 65362, 3, "\x1b[A" }, //Up
-				{ 65364, 3, "\x1b[B" }, //Down
-				{ 65361, 3, "\x1b[D" }, //Left
-				{ 65363, 3, "\x1b[C" }, //Right
+				{ 65362, 3, "\x1b[A" },  //Up
+				{ 65364, 3, "\x1b[B" },  //Down
+				{ 65361, 3, "\x1b[D" },  //Left
+				{ 65363, 3, "\x1b[C" },  //Right
 				{ 65366, 4, "\x1b[6~" }, //PgDn
 				{ 65365, 4, "\x1b[5~" }, //PgUp
-				{ 65367, 3, "\x1b[F" }, //Home
-				{ 65360, 3, "\x1b[H" }, //End
+				{ 65367, 3, "\x1b[F" },  //Home
+				{ 65360, 3, "\x1b[H" },  //End
+				{ 65535, 4, "\x1b[3~" }, //Del
+				{ 65379, 4, "\x1b[4~" }, //Ins
 				{ 255, 0, "" },
 			};
 			int i;
@@ -149,11 +162,24 @@ void HandleKey( int keycode, int bDown )
 			{
 				keycode = g_x_global_shift_key;
 			}
-			else if( ctrl_held && keycode >= 'a' && keycode <= 'z' )
+			else if( ctrl_held )
 			{
-				keycode = keycode - 'a' + 1;
+				if( keycode == 'c' )
+				{
+					kill( tcgetpgrp(ts.ptspipe), SIGINT );
+					return;
+				}
+				else if( keycode >= 'a' && keycode <= 'z' )
+				{
+					keycode = keycode - 'a' + 1;
+				}
+				else if( keycode == ']' )
+				{
+					keycode = 0x1d;
+				}
 			}
-			//printf( "%d %d\n", keycode, g_x_global_shift_key );
+
+			printf( "%d %d\n", keycode, g_x_global_shift_key );
 			char cc[1] = { keycode };
 			FeedbackTerminal( &ts, cc, 1 );
 			if( ts.echo ) EmitChar( &ts, keycode );
@@ -205,71 +231,86 @@ int main()
 	short h = ts.chary * font_h * (CHAR_DOUBLE+1);
 	CNFGSetup( "Test terminal", w, h );
 
-
 	uint32_t * framebuffer = malloc( w * h * 4 ); 
 	uint8_t * text_buffer = ts.text_buffer = malloc( ts.charx * ts.chary );
 	unsigned char * attrib_buffer = ts.attrib_buffer = malloc( ts.charx * ts.chary );
 	unsigned char * color_buffer  = ts.color_buffer =  malloc( ts.charx * ts.chary );
+	ts.taint_buffer = calloc( ts.charx, ts.chary );
 
 	ResetTerminal( &ts );
 
 	char * localargv[] = { "/bin/bash", 0 };
-	spawn_process_with_pipes( "/bin/bash", localargv, ts.pipes );
+	ts.ptspipe = spawn_process_with_pts( "/bin/bash", localargv, &ts.pid );
 
-	ts.lis[0].ts = &ts;
-	ts.lis[1].ts = &ts;
-	ts.lis[0].watchvar = 1;
-	ts.lis[1].watchvar = 2;
+	{
+		struct winsize tsize;
+		tsize.ws_col = INIT_CHARX;
+		tsize.ws_row = INIT_CHARY;
+		ioctl(ts.ptspipe, TIOCSWINSZ, &tsize);
+	}
 
-	OGCreateThread( rxthread, (void*)&ts.lis[0] );
-	OGCreateThread( rxthread, (void*)&ts.lis[1] );
+	OGCreateThread( rxthread, (void*)&ts );
 
 	usleep(10000);
 //	FeedbackTerminal( &ts, "script /dev/null\n", 17 );
 	FeedbackTerminal( &ts, "export TERM=linux\n", 18 );
 
+	int last_curx = 0, last_cury = 0;
 	while(1)
 	{
 		int x, y;
 		CNFGHandleInput();
-		for( y = 0; y < ts.chary; y++ )
-		for( x = 0; x < ts.charx; x++ )
+
+
+		if( last_curx != ts.curx || last_cury != ts.cury || ts.tainted )
 		{
-			unsigned char c = text_buffer[x+y*ts.charx];
-			int color = ts.color_buffer[x+y*ts.charx];
-			int attrib = ts.attrib_buffer[x+y*ts.charx];
-			int cx, cy;
-			int atlasx = c & 0x0f;
-			int atlasy = c >> 4;
-			uint32_t * fbo =   &framebuffer[x*font_w*(CHAR_DOUBLE+1) + y*font_h*w*(CHAR_DOUBLE+1)];
-			uint32_t * start = &font[atlasx*font_w+atlasy*font_h*charset_w];
-			int is_cursor = (x == ts.curx && y == ts.cury) && (ts.dec_private_mode & (1<<25));
-	#if CHAR_DOUBLE==1
-			for( cy = 0; cy < font_h; cy++ )
+			ts.tainted = 0;
+			ts.taint_buffer[last_curx+last_cury*ts.charx] = 1;
+			ts.taint_buffer[ts.curx + ts.cury * ts.charx] = 1;
+			last_curx = ts.curx;
+			last_cury = ts.cury;
+
+			for( y = 0; y < ts.chary; y++ )
+			for( x = 0; x < ts.charx; x++ )
 			{
-				for( cx = 0; cx < font_w; cx++ )
+				if( !ts.taint_buffer[x+y*ts.charx] ) continue;
+				ts.taint_buffer[x+y*ts.charx] = 0;
+				unsigned char c = text_buffer[x+y*ts.charx];
+				int color = ts.color_buffer[x+y*ts.charx];
+				int attrib = ts.attrib_buffer[x+y*ts.charx];
+				int cx, cy;
+				int atlasx = c & 0x0f;
+				int atlasy = c >> 4;
+				uint32_t * fbo =   &framebuffer[x*font_w*(CHAR_DOUBLE+1) + y*font_h*w*(CHAR_DOUBLE+1)];
+				uint32_t * start = &font[atlasx*font_w+atlasy*font_h*charset_w];
+				int is_cursor = (x == ts.curx && y == ts.cury) && (ts.dec_private_mode & (1<<25));
+		#if CHAR_DOUBLE==1
+				for( cy = 0; cy < font_h; cy++ )
 				{
-					fbo[cx*2+0] = fbo[cx*2+1] = (is_cursor?0xffffffff:0)^TermColor( start[cx], color, attrib );
+					for( cx = 0; cx < font_w; cx++ )
+					{
+						fbo[cx*2+0] = fbo[cx*2+1] = (is_cursor?0xffffffff:0)^TermColor( start[cx], color, attrib );
+					}
+					fbo += w;
+					for( cx = 0; cx < font_w; cx++ )
+					{
+						fbo[cx*2+0] = fbo[cx*2+1] = (is_cursor?0xffffffff:0)^TermColor( start[cx], color, attrib );
+					}
+					fbo += w;
+					start += charset_w;
 				}
-				fbo += w;
-				for( cx = 0; cx < font_w; cx++ )
+		#else
+				for( cy = 0; cy < font_h; cy++ )
 				{
-					fbo[cx*2+0] = fbo[cx*2+1] = (is_cursor?0xffffffff:0)^TermColor( start[cx], color, attrib );
+					for( cx = 0; cx < font_w; cx++ )
+					{
+						fbo[cx] = (is_cursor?0xffffffff:0)^TermColor( start[cx], color, attrib );
+					}
+					fbo += w;
+					start += charset_w;
 				}
-				fbo += w;
-				start += charset_w;
+		#endif
 			}
-	#else
-			for( cy = 0; cy < font_h; cy++ )
-			{
-				for( cx = 0; cx < font_w; cx++ )
-				{
-					fbo[cx] = (is_cursor?0xffffffff:0)^TermColor( start[cx], color, attrib );
-				}
-				fbo += w;
-				start += charset_w;
-			}
-	#endif
 		}
 		CNFGUpdateScreenWithBitmap( (unsigned long *)framebuffer, w, h );
 		usleep(20000);
@@ -297,34 +338,45 @@ int main()
 
 
 
-int spawn_process_with_pipes( const char * execparam, char * const argv[], int pipefd[3] )
+int spawn_process_with_pts( const char * execparam, char * const argv[], int * pid )
 {
-	int pipeset[6];
-
 	int r = getpt();
-	grantpt(r);
-	unlockpt( r );
+	if( r <= 0 ) return -1;
+	if( grantpt(r) ) return -2;
+	if( unlockpt( r ) ) return -3;
 	char slavepath[64];
 	if(ptsname_r(r, slavepath, sizeof(slavepath)) < 0)
 	{
-		perror("ptsname_r");
-		exit(1);
+		return -4;
 	}
+
 
 	int rforkv = fork();
 	if (rforkv == 0)
 	{
-		int r = open( slavepath, O_RDWR | O_NOCTTY );
+		close( r ); //Close master
+		close( 0 );
+		close( 1 );
+		close( 2 );
+		r = open( slavepath, O_RDWR | O_NOCTTY ); //Why did the previous example have the O_NOCTTY flag?
 		dup2( r, 0 );
 		dup2( r, 1 );
 		dup2( r, 2 );
-		dup2( r, 255 );
+		setsid();
 		execvp( execparam, argv );
 	}
 	else
 	{
-		pipefd[0] = pipefd[1] = pipefd[2] = r;
-		return rforkv;
+		//https://stackoverflow.com/questions/13849582/sending-signal-to-a-forked-process-that-calls-exec
+		//setpgid(rforkv, 0);   //Why is this mutually exclusive with setsid()?
+		if( rforkv < 0 )
+		{
+			close( r );
+			return -10;
+		}
+		*pid = rforkv;
+		return r;
 	}
 }
+
 

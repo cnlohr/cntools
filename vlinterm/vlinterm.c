@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 
-//#define DEBUG_VLINTERM
+#define DEBUG_VLINTERM
 
 void BufferSet( struct TermStructure * ts, int start, int value, int length )
 {
@@ -20,6 +20,8 @@ void BufferSet( struct TermStructure * ts, int start, int value, int length )
 		memset( ts->attrib_buffer + start, valueatt, length );
 		memset( ts->color_buffer + start, valuec, length );
 	}
+	memset( ts->taint_buffer + start, 1, length );
+	ts->tainted = 1;
 }
 
 void BufferCopy( struct TermStructure * ts, int dest, int src, int length )
@@ -68,6 +70,8 @@ void BufferCopy( struct TermStructure * ts, int dest, int src, int length )
 		memcpy( ts->attrib_buffer + dest, ts->attrib_buffer + src, length );
 		memcpy( ts->color_buffer + dest,  ts->color_buffer + src, length );
 	}
+	memset( ts->taint_buffer + dest, 1, length );
+	ts->tainted = 1;
 }
 
 void ResetTerminal( struct TermStructure * ts )
@@ -88,9 +92,9 @@ void ResetTerminal( struct TermStructure * ts )
 	BufferSet( ts, 0, 0, ts->charx * ts->chary );
 }
 
-int FeedbackTerminal( struct TermStructure * ts, uint8_t * data, int len )
+int FeedbackTerminal( struct TermStructure * ts, const uint8_t * data, int len )
 {
-	return write( ts->pipes[0], data, len );
+	return write( ts->ptspipe, data, len );
 }
 
 void HandleNewline( struct TermStructure * ts )
@@ -115,7 +119,7 @@ void EmitChar( struct TermStructure * ts, int crx )
 	OGLockMutex( ts->screen_mutex );
 	if( crx == '\r' ) { goto linefeed; }
 	else if( crx == '\n' ) { goto newline; }
-	else if( crx == 7 && ts->escapestate != 3 /* Make sure we're not in the OSC CSI */ ) { /*beep*/ }
+	else if( crx == 7 && ts->escapestate != 3 /* Make sure we're not in the OSC CSI */ ) { HandleBell( ts ); }
 	else if( crx == 8 ) {
 		if( ts->curx ) ts->curx--;
 		//BufferSet( ts, ts->curx+ts->cury*ts->charx, 0, 1 );

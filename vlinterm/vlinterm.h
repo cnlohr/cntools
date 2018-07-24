@@ -10,10 +10,12 @@
 
 struct TermStructure
 {
-	int pipes[3];
+	int ptspipe;
 	uint8_t * text_buffer;
 	uint8_t * attrib_buffer;
 	uint8_t * color_buffer;
+	uint8_t * taint_buffer;
+	uint8_t tainted;
 	int current_color;
 	int current_attributes;
 
@@ -35,26 +37,20 @@ struct TermStructure
 	int osc_command_place;
 	char osc_command[128];
 
+	int pid;
 
 	int scroll_top;
 	int scroll_bottom;
-
-	//This is here so we can handle information from stdout as well as stderr.
-	struct LaunchInfo
-	{
-		struct TermStructure * ts;
-		int watchvar;
-	} lis[2]; 
 
 	og_mutex_t screen_mutex;
 };
 
 void EmitChar( struct TermStructure * ts, int crx );
 void ResetTerminal( struct TermStructure * ts );
-int FeedbackTerminal( struct TermStructure * ts, uint8_t * data, int len );
+int FeedbackTerminal( struct TermStructure * ts, const uint8_t * data, int len );
 
 //You must implement this.
 void HandleOSCCommand( struct TermStructure * ts, int parameter, const char * value );
-
+void HandleBell( struct TermStructure * ts );
 #endif
 
