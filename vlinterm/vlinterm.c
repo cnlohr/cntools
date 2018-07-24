@@ -97,8 +97,26 @@ int FeedbackTerminal( struct TermStructure * ts, const uint8_t * data, int len )
 	return write( ts->ptspipe, data, len );
 }
 
-void HandleNewline( struct TermStructure * ts )
-{ 
+void InsertBlankLines( struct TermStructure * ts, int l )
+{
+	if( l > ts->scroll_bottom - ts->cury ) l = ts->scroll_bottom - ts->cury;
+	if( l > 0 )
+	{
+		int lines_need_to_move = ts->scroll_bottom - ts->cury - l;
+		printf( "PUSHING %d LINES / %d * %d\n", l, lines_need_to_move, ts->cury );
+		if( lines_need_to_move > 0 ) 
+			BufferCopy( ts, (l+ts->cury)*ts->charx, ts->cury*ts->charx, ts->charx * ( ts->scroll_bottom - l - ts->cury  ) );
+		BufferSet( ts, ts->cury*ts->charx, 0, ts->charx * l );
+	}
+}
+
+void HandleNewline( struct TermStructure * ts, int advance )
+{
+	if( advance )
+	{
+		printf( "Handle newline\n" );
+		InsertBlankLines( ts, 1 );
+	}
 	if( ts->cury >= ts->chary )
 	{
 		//Must handle scrolling the screen up;
@@ -113,7 +131,7 @@ void EmitChar( struct TermStructure * ts, int crx )
 {
 
 #ifdef DEBUG_VLINTERM
-	//fprintf( stderr, "(%d %d %c)", crx, ts->curx, crx );
+	fprintf( stderr, "(%d %d %c)", crx, ts->curx, crx );
 #endif
 
 	OGLockMutex( ts->screen_mutex );
@@ -311,12 +329,7 @@ void EmitChar( struct TermStructure * ts, int crx )
 				case 'L': //Inset blank lines.
 					{
 						int l = ts->csistate[0];
-						if( l > ts->chary - ts->cury ) l = ts->chary - ts->cury;
-						if( l > 0 )
-						{
-							BufferCopy( ts, (l+ts->cury)*ts->charx, ts->cury*ts->charx, ts->charx * l );
-							BufferSet( ts, ts->cury*ts->charx, 0, ts->charx * l );
-						}
+						InsertBlankLines( ts, l );
 					}
 					break;
 				case 'M': //Delete the specified number of lines.
@@ -432,7 +445,7 @@ void EmitChar( struct TermStructure * ts, int crx )
 		}
 		else
 		{
-			if( ts->curx >= ts->charx ) { ts->curx = 0; ts->cury++; HandleNewline( ts ); }
+			if( ts->curx >= ts->charx ) { ts->curx = 0; ts->cury++; HandleNewline( ts, 0 ); }
 			BufferSet( ts, ts->curx+ts->cury*ts->charx, crx, 1 );
 			ts->curx++;
 		}
@@ -444,13 +457,15 @@ void EmitChar( struct TermStructure * ts, int crx )
 	goto end;
 linefeed:
 	ts->curx = 0;
-	HandleNewline( ts);
+	printf( "LF\n" );
+	HandleNewline( ts, 0 );
 	goto end;
 
 newline:
 	ts->cury ++;
 	ts->curx = 0;
-	HandleNewline( ts );
+	printf( "NL\n" );
+	HandleNewline( ts, 1 );
 	goto end;
 
 csi_state_start:

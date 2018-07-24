@@ -16,7 +16,7 @@ int spawn_process_with_pts( const char * execparam, char * const argv[], int * p
 
 #define INIT_CHARX  80
 #define INIT_CHARY  25
-#define CHAR_DOUBLE 0   //Set to 1 to double size, or 0 for normal size.
+#define CHAR_DOUBLE 1   //Set to 1 to double size, or 0 for normal size.
 
 int charset_w, charset_h, font_w, font_h;
 uint32_t * font;
@@ -115,7 +115,10 @@ void HandleKey( int keycode, int bDown )
 	}
 	else if( bDown )
 	{
-		printf( "KEYCODE: %d\n", keycode );
+		int len = 0;
+		const char * str = 0;
+		char cc[1] = { keycode };
+
 		if( keycode >= 255 )
 		{
 			struct KeyLooup
@@ -144,7 +147,8 @@ void HandleKey( int keycode, int bDown )
 			{
 				if( keys[i].key == keycode )
 				{
-					FeedbackTerminal( &ts, keys[i].string, keys[i].stringlen );
+					len = keys[i].stringlen;
+					str = keys[i].string;
 					break;
 				}
 			}
@@ -178,11 +182,15 @@ void HandleKey( int keycode, int bDown )
 					keycode = 0x1d;
 				}
 			}
+			str = cc;
+			len = 1;
+		}
 
-			printf( "%d %d\n", keycode, g_x_global_shift_key );
-			char cc[1] = { keycode };
-			FeedbackTerminal( &ts, cc, 1 );
-			if( ts.echo ) EmitChar( &ts, keycode );
+		int i;
+		for( i = 0; i < len; i++ )
+		{
+			FeedbackTerminal( &ts, str + i, 1 );
+			if( ts.echo ) EmitChar( &ts, str[i] );
 		}
 	}
 }
@@ -311,8 +319,19 @@ int main()
 				}
 		#endif
 			}
+			CNFGUpdateScreenWithBitmap( (unsigned long *)framebuffer, w, h );
 		}
-		CNFGUpdateScreenWithBitmap( (unsigned long *)framebuffer, w, h );
+		else
+		{
+			static int waittoupdate;
+			if( waittoupdate++ == 10 )
+			{
+				waittoupdate = 0;
+				CNFGUpdateScreenWithBitmap( (unsigned long *)framebuffer, w, h );
+			}
+			
+			
+		}
 		usleep(20000);
 	//	CNFGSwapBuffers();
 	}
