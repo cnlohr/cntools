@@ -117,9 +117,22 @@ void HandleKey( int keycode, int bDown )
 	{
 		int len = 0;
 		const char * str = 0;
-		char cc[1] = { keycode };
+		char cc[3] = { keycode };
 
-		if( keycode >= 255 )
+		if( keycode == 65293 || keycode == 65421 )
+		{
+			//Enter key: Be careful with these...
+			cc[0] = '\x0a';
+			len = 1;
+			if( ts.dec_private_mode & (1<<20) )
+			{
+				cc[1] = '\x0d';
+				len = 2;
+			}
+			str = cc;
+			printf( "Updating. %08x %08x\n", ts.dec_private_mode, ts.dec_mode );
+		}
+		else if( keycode >= 255 )
 		{
 			struct KeyLooup
 			{
@@ -127,7 +140,6 @@ void HandleKey( int keycode, int bDown )
 				short stringlen;
 				const char * string;
 			} keys[] = {
-				{ 65293, 1, "\r" },
 				{ 65288, 1, "\x08" },
 				{ 65289, 1, "\x09" },
 				{ 65362, 3, "\x1b[A" },  //Up
