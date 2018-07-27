@@ -131,7 +131,7 @@ void EmitChar( struct TermStructure * ts, int crx )
 {
 
 #ifdef DEBUG_VLINTERM
-	fprintf( stderr, "(%d %d %c)", crx, ts->curx, crx );
+	//fprintf( stderr, "(%d %d %c)", crx, ts->curx, crx );
 #endif
 
 	OGLockMutex( ts->screen_mutex );
@@ -240,7 +240,7 @@ void EmitChar( struct TermStructure * ts, int crx )
 					if( set >= 0 )
 					{
 						int bit = ts->csistate[ts->whichcsi];
-						if( bit == 1000 )
+						if( bit == 1000 ) //X11 mouse reporting.
 							bit = 30;
 						if( bit > 30 || bit < 0 )
 						{
