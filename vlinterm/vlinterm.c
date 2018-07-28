@@ -4,7 +4,7 @@
 
 //#define DEBUG_VLINTERM
 
-void BufferSet( struct TermStructure * ts, int start, int value, int length )
+static void BufferSet( struct TermStructure * ts, int start, int value, int length )
 {
 	int valuec = ts->current_color;
 	int valueatt = ts->current_attributes;
@@ -24,7 +24,7 @@ void BufferSet( struct TermStructure * ts, int start, int value, int length )
 	ts->tainted = 1;
 }
 
-void BufferCopy( struct TermStructure * ts, int dest, int src, int length )
+static void BufferCopy( struct TermStructure * ts, int dest, int src, int length )
 {
 	if( src < 0 ) { 
 #ifdef DEBUG_VLINTERM
@@ -82,9 +82,15 @@ void BufferCopy( struct TermStructure * ts, int dest, int src, int length )
 	ts->tainted = 1;
 }
 
+static void UpdateTopBottom( struct TermStructure * ts )
+{
+	ts->top    = (ts->scroll_top<0)?0:(ts->scroll_top);
+	ts->bottom = (ts->scroll_bottom<0)?ts->chary:(ts->scroll_bottom+1);
+}
+
 void ResetTerminal( struct TermStructure * ts )
 {
-	ts->dec_private_mode = 1<<25; //Enable cursor.
+	ts->dec_private_mode = /*(1<<12) |*/ (1<<25); //Enable cursor.
 	ts->dec_mode = 0;
 
 	ts->curx = ts->cury = 0;
@@ -98,6 +104,7 @@ void ResetTerminal( struct TermStructure * ts )
 	ts->scroll_bottom = -1;
 
 	BufferSet( ts, 0, 0, ts->charx * ts->chary );
+	UpdateTopBottom( ts );
 }
 
 int FeedbackTerminal( struct TermStructure * ts, const uint8_t * data, int len )
@@ -105,7 +112,7 @@ int FeedbackTerminal( struct TermStructure * ts, const uint8_t * data, int len )
 	return write( ts->ptspipe, data, len );
 }
 
-void InsertBlankLines( struct TermStructure * ts, int l )
+static void InsertBlankLines( struct TermStructure * ts, int l )
 {
 	if( l > ts->scroll_bottom - ts->cury ) l = ts->scroll_bottom - ts->cury;
 	if( l > 0 )
@@ -118,22 +125,27 @@ void InsertBlankLines( struct TermStructure * ts, int l )
 	}
 }
 
-void HandleNewline( struct TermStructure * ts, int advance )
+static int ScrollDown( struct TermStructure * ts, int lines )
 {
-	if( advance )
+	BufferCopy( ts, (ts->top+lines)*ts->charx, ts->top*ts->charx, (ts->bottom-ts->top-lines)*ts->charx );
+	BufferSet( ts, (ts->top)*ts->charx, 0, ts->charx*lines );
+}
+
+static int ScrollUp( struct TermStructure * ts, int lines )
+{
+	BufferCopy( ts, ts->top*ts->charx, (ts->top+lines)*ts->charx, (ts->bottom-ts->top-lines)*ts->charx );
+	BufferSet( ts, (ts->bottom-lines)*ts->charx, 0, ts->charx*lines );
+}
+
+static void HandleNewline( struct TermStructure * ts, int advance )
+{
+	if( advance && ( ts->dec_private_mode & (1<<12) ) )
 	{
-		//printf( "Handle newline\n" );
 		InsertBlankLines( ts, 1 );
 	}
-
-	int top    = (ts->scroll_top<0)?0:(ts->scroll_top+1);
-	int bottom = (ts->scroll_bottom<0)?ts->chary:(ts->scroll_bottom+1);
-//	int bottom = ts->chary;
-	if( ts->cury >= bottom )
+	if( ts->cury >= ts->bottom )
 	{
-		//Must handle scrolling the screen up;
-		BufferCopy( ts, 0, ts->charx, (bottom-top)*ts->charx );
-		BufferSet( ts, (bottom-1)*ts->charx, 0, ts->charx );
+		ScrollUp( ts, 1 );
 		ts->cury--;
 	}
 }
@@ -314,6 +326,12 @@ void EmitChar( struct TermStructure * ts, int crx )
 				case ';': ts->escapestate = 2; if( ts->whichcsi < MAX_CSI_PARAMS ) { ts->whichcsi++; ts->csistate[ts->whichcsi] = -1; } break;
 				case 'h': ts->dec_mode |= 1<<ts->csistate[0]; break;
 				case 'l': ts->dec_mode &= ~(1<<ts->csistate[0]); break;
+				case 'S': //Scroll up
+					ScrollUp( ts, ts->csistate[0] );
+					break;
+				case 'T': //Scroll down
+					ScrollDown( ts, ts->csistate[0] );
+					break;
 				case 'f':
 				case 'H':	//CUP - Cursor Position
 					if( ts->csistate[0] <= 0 ) ts->csistate[0] = 1;
@@ -388,6 +406,7 @@ void EmitChar( struct TermStructure * ts, int crx )
 					ts->scroll_bottom = ts->csistate[1]-1;
 					ts->curx = 0;
 					ts->cury = ts->scroll_top;
+					UpdateTopBottom( ts );
 					break;
 				case 'm':
 				{

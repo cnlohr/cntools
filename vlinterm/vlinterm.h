@@ -42,6 +42,10 @@ struct TermStructure
 	int scroll_top;
 	int scroll_bottom;
 
+	//Must update these from charx, chary.
+	int top;
+	int bottom; //XXX TODO: make sure scroll_top and scroll_bottom shouldn't be this elsewhere in code.
+
 	og_mutex_t screen_mutex;
 };
 
