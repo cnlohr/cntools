@@ -122,11 +122,11 @@ void HandleKey( int keycode, int bDown )
 		if( keycode == 65293 || keycode == 65421 )
 		{
 			//Enter key: Be careful with these...
-			cc[0] = '\x0a';
+			cc[0] = '\x0d';
 			len = 1;
 			if( ts.dec_private_mode & (1<<20) )
 			{
-				cc[1] = '\x0d';
+				cc[1] = '\x0a';
 				len = 2;
 			}
 			str = cc;
@@ -142,6 +142,7 @@ void HandleKey( int keycode, int bDown )
 			} keys[] = {
 				{ 65288, 1, "\x08" },
 				{ 65289, 1, "\x09" },
+				{ 65307, 1, "\x1b" },
 				{ 65362, 3, "\x1b[A" },  //Up
 				{ 65364, 3, "\x1b[B" },  //Down
 				{ 65361, 3, "\x1b[D" },  //Left
@@ -274,7 +275,7 @@ int main()
 
 	usleep(10000);
 //	FeedbackTerminal( &ts, "script /dev/null\n", 17 );
-	FeedbackTerminal( &ts, "export TERM=linux\n", 18 );
+//	FeedbackTerminal( &ts, "export TERM=linux\n", 18 );
 
 	int last_curx = 0, last_cury = 0;
 	while(1)
@@ -368,6 +369,7 @@ int main()
 
 
 
+#include <pwd.h>
 
 
 int spawn_process_with_pts( const char * execparam, char * const argv[], int * pid )
@@ -395,6 +397,35 @@ int spawn_process_with_pts( const char * execparam, char * const argv[], int * p
 		dup2( r, 1 );
 		dup2( r, 2 );
 		setsid();
+
+		//From ST
+		{
+			const struct passwd *pw;
+			char *sh, *prog;
+
+			errno = 0;
+			if ((pw = getpwuid(getuid())) == NULL) {
+				if (errno)
+					fprintf( stderr, "getpwuid:%s\n", strerror(errno));
+				else
+					fprintf( stderr, "who are you?\n");
+			}
+
+			if ((sh = getenv("SHELL")) == NULL)
+				sh = (pw->pw_shell[0]) ? pw->pw_shell : "bash";
+
+			prog = sh;
+			//DEFAULT(args, ((char *[]) {prog, NULL}));
+
+			unsetenv("COLUMNS");
+			unsetenv("LINES");
+			unsetenv("TERMCAP");
+			setenv("LOGNAME", pw->pw_name, 1);
+			setenv("USER", pw->pw_name, 1);
+			setenv("SHELL", sh, 1);
+			setenv("HOME", pw->pw_dir, 1);
+			setenv("TERM", "xterm", 1);
+		}
 		execvp( execparam, argv );
 	}
 	else

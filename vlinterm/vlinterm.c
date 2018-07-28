@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define DEBUG_VLINTERM
+//#define DEBUG_VLINTERM
 
 void BufferSet( struct TermStructure * ts, int start, int value, int length )
 {
@@ -51,6 +51,14 @@ void BufferCopy( struct TermStructure * ts, int dest, int src, int length )
 #endif
 		return;
 	} 
+
+	if( length < 0 )
+	{
+#ifdef DEBUG_VLINTERM
+		fprintf( stderr, "Warning! Negative len copy\n" );
+#endif
+		return;
+	}
 
 	//Detect if we have overlapping regions, if so we must use a temporary buffer.
 	if( ( dest > src && src + length >= dest ) ||
@@ -103,7 +111,7 @@ void InsertBlankLines( struct TermStructure * ts, int l )
 	if( l > 0 )
 	{
 		int lines_need_to_move = ts->scroll_bottom - ts->cury - l;
-		printf( "PUSHING %d LINES / %d * %d\n", l, lines_need_to_move, ts->cury );
+		//printf( "PUSHING %d LINES / %d * %d\n", l, lines_need_to_move, ts->cury );
 		if( lines_need_to_move > 0 ) 
 			BufferCopy( ts, (l+ts->cury)*ts->charx, ts->cury*ts->charx, ts->charx * ( ts->scroll_bottom - l - ts->cury  ) );
 		BufferSet( ts, ts->cury*ts->charx, 0, ts->charx * l );
@@ -114,15 +122,18 @@ void HandleNewline( struct TermStructure * ts, int advance )
 {
 	if( advance )
 	{
-		printf( "Handle newline\n" );
+		//printf( "Handle newline\n" );
 		InsertBlankLines( ts, 1 );
 	}
-	if( ts->cury >= ts->chary )
+
+	int top    = (ts->scroll_top<0)?0:(ts->scroll_top+1);
+	int bottom = (ts->scroll_bottom<0)?ts->chary:(ts->scroll_bottom+1);
+//	int bottom = ts->chary;
+	if( ts->cury >= bottom )
 	{
 		//Must handle scrolling the screen up;
-		int line;
-		BufferCopy( ts, 0, ts->charx, (ts->chary-1)*ts->charx );
-		BufferSet( ts, (ts->chary-1)*ts->charx, 0, ts->charx );
+		BufferCopy( ts, 0, ts->charx, (bottom-top)*ts->charx );
+		BufferSet( ts, (bottom-1)*ts->charx, 0, ts->charx );
 		ts->cury--;
 	}
 }
@@ -131,7 +142,7 @@ void EmitChar( struct TermStructure * ts, int crx )
 {
 
 #ifdef DEBUG_VLINTERM
-	//fprintf( stderr, "(%d %d %c)", crx, ts->curx, crx );
+	fprintf( stderr, "(%d %d %c)", crx, ts->curx, crx );
 #endif
 
 	OGLockMutex( ts->screen_mutex );
@@ -157,20 +168,22 @@ void EmitChar( struct TermStructure * ts, int crx )
 		if( ts->escapestate == 1 )
 		{
 			ts->escapestate = 0;
+#ifdef DEBUG_VLINTERM
+			fprintf( stderr, "{E: %d[%c] (%d %d %d %d)}", crx, crx, ts->curx, ts->cury, ts->savex, ts->savey );
+#endif
 			switch( crx )
 			{
 				case 'c': ResetTerminal(ts); break;
 				case 'D': goto linefeed;
 				case 'E': goto newline;
 				//case 'H': break; //Set tabstop
-				case 'M':
+				case 'M':	//Reverse linefeed.
 					ts->cury--;
-					if( ts->cury < 0 )
+					if( ts->cury < ts->scroll_top )
 					{
-						int i;
-						BufferCopy( ts, ts->charx, 0, ts->charx * (ts->chary-1) );
-						BufferSet( ts, 0, 0, ts->charx );
-						ts->cury = 0;
+						BufferCopy( ts, ts->charx*(ts->scroll_top+1), ts->charx*ts->scroll_top, (ts->scroll_bottom - ts->scroll_top - 1) * ts->charx );
+						BufferSet( ts, ts->charx*ts->scroll_top, 0, ts->charx );
+						ts->cury = ts->scroll_top;
 					} 
 					break;
 				//case 'Z': FeedbackTerminal( ts, "\x1b[?6c", 5 ); break;
@@ -180,6 +193,7 @@ void EmitChar( struct TermStructure * ts, int crx )
 				case '=': ts->dec_keypad_mode = 1; break;
 				case '>': ts->dec_keypad_mode = 2; break;
 				case ']': goto csi_state_start;
+				case '(': ts->escapestate = 4; break; //Start sequence defining G0 character set
 				//case ')':
 				//case '%':
 				//case '(': ts->escapestate = 5; break;
@@ -196,7 +210,7 @@ void EmitChar( struct TermStructure * ts, int crx )
 			{
 				//ESC ] ### ; For an OSC command.
 #ifdef DEBUG_VLINTERM
-				printf("];command\n" );
+				fprintf( stderr, "];command\n" );
 #endif
 				ts->escapestate = 3;
 				ts->osc_command_place = 0;
@@ -219,13 +233,13 @@ void EmitChar( struct TermStructure * ts, int crx )
 				if( is_seq_default ) ts->csistate[ts->whichcsi] = 1; //Default
 
 #ifdef DEBUG_VLINTERM
-				printf( "DEC PRIV CSI: '%c' %d %d / %d[%c]\n", crx, ts->csistate[0], ts->csistate[1], ts->dec_priv_csi, ts->dec_priv_csi );
+				fprintf( stderr, "DEC PRIV CSI: '%c' %d %d / %d[%c]\n", crx, ts->csistate[0], ts->csistate[1], ts->dec_priv_csi, ts->dec_priv_csi );
 #endif
 				int set = -1;
 				if( crx == 'c' )
 				{
 #ifdef DEBUG_VLINTERM
-					printf( "Got a private [?c - not sure what to do with it.\n" );
+					fprintf( stderr, "Got a private [?c - not sure what to do with it.\n" );
 #endif
 					//What is this?!?
 					//char sto[128];
@@ -264,6 +278,11 @@ void EmitChar( struct TermStructure * ts, int crx )
 					}
 				}
 			}
+			else if( ts->escapestate == 4 )
+			{
+				//Charset escape sequence (Not implemented yet)
+				ts->escapestate = 0;
+			}
 			else
 			{
 				ts->escapestate = 0;
@@ -271,7 +290,7 @@ void EmitChar( struct TermStructure * ts, int crx )
 				if( is_seq_default ) ts->csistate[ts->whichcsi] = 1; //Default
 
 #ifdef DEBUG_VLINTERM
-				if( crx != ';' ) printf( "CRX: %d %d  %d %d %c\n", ts->csistate[0], ts->csistate[1], ts->curx, ts->cury, crx );
+				if( crx != ';' ) fprintf( stderr, "CRX: %d %d  %d %d %c\n", ts->csistate[0], ts->csistate[1], ts->curx, ts->cury, crx );
 #endif
 				//This is the big list of CSI escapes.
 				switch( crx )
@@ -428,43 +447,43 @@ void EmitChar( struct TermStructure * ts, int crx )
 			ts->escapestate = 0;
 		}
 
-		if( ts->cury < 0 ) ts->cury = 0;
+		int top    = (ts->scroll_top<0)?0:ts->scroll_top;
+		int bottom = (ts->scroll_bottom<0)?ts->chary:(ts->scroll_bottom+1);
+		if( ts->cury < top ) ts->cury = top;
 		if( ts->curx < 0 ) ts->curx = 0;
-		if( ts->cury >= ts->chary ) ts->cury = ts->chary-1;
-		if( ts->curx >= ts->charx ) ts->curx = ts->charx-1;
+		if( ts->cury >= bottom ) ts->cury = bottom-1;
+		if( ts->curx >= ts->charx ) ts->curx = ts->charx-1; //XXX DUBIOUS
 	}
 	else
 	{
-		//No escape sequenc.  Just handle the character.
+		//No escape sequence.  Just handle the character.
 
-		if( ts->dec_private_mode & 2 ) //??? XXX Is this correct? 
+		/*if( ts->dec_private_mode & 2 ) //??? XXX Is this correct? 
 		{
 			if( ts->curx >= ts->charx ) { ts->curx = 0; ts->cury++; if( ts->cury >= ts->chary ) ts->cury = ts->chary-1; } 
 			BufferSet( ts, ts->curx+ts->cury*ts->charx, crx, 1 );
 			ts->curx++;
 		}
 		else
-		{
+		{*/
 			if( ts->curx >= ts->charx ) { ts->curx = 0; ts->cury++; HandleNewline( ts, 0 ); }
 			BufferSet( ts, ts->curx+ts->cury*ts->charx, crx, 1 );
 			ts->curx++;
-		}
+		//}
 #ifdef DEBUG_VLINTERM
-		if( crx < 32 || crx < 0 ) printf( "CRX %d\n", (uint8_t)crx );
+		if( crx < 32 || crx < 0 ) fprintf( stderr, "C-X %d\n", (uint8_t)crx );
 #endif
 	}
 
 	goto end;
 linefeed:
 	ts->curx = 0;
-	printf( "LF\n" );
 	HandleNewline( ts, 0 );
 	goto end;
 
 newline:
 	ts->cury ++;
 	ts->curx = 0;
-	printf( "NL\n" );
 	HandleNewline( ts, 1 );
 	goto end;
 
