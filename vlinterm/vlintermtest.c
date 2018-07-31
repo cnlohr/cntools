@@ -8,7 +8,6 @@
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <signal.h>
-#include <termios.h>
 #include <errno.h>
 #include "vlinterm.h"
 
@@ -16,7 +15,7 @@ int spawn_process_with_pts( const char * execparam, char * const argv[], int * p
 
 #define INIT_CHARX  80
 #define INIT_CHARY  25
-#define CHAR_DOUBLE 1   //Set to 1 to double size, or 0 for normal size.
+#define CHAR_DOUBLE 0   //Set to 1 to double size, or 0 for normal size.
 
 int charset_w, charset_h, font_w, font_h;
 uint32_t * font;
@@ -130,7 +129,6 @@ void HandleKey( int keycode, int bDown )
 				len = 2;
 			}
 			str = cc;
-			printf( "Updating. %08x %08x\n", ts.dec_private_mode, ts.dec_mode );
 		}
 		else if( keycode >= 255 )
 		{
@@ -139,7 +137,8 @@ void HandleKey( int keycode, int bDown )
 				unsigned short key;
 				short stringlen;
 				const char * string;
-			} keys[] = {
+			};
+			const struct KeyLooup keys[] = {
 				{ 65288, 1, "\x08" },
 				{ 65289, 1, "\x09" },
 				{ 65307, 1, "\x1b" },
@@ -253,25 +252,12 @@ int main()
 	short h = ts.chary * font_h * (CHAR_DOUBLE+1);
 	CNFGSetup( "Test terminal", w, h );
 
-	uint32_t * framebuffer = malloc( w * h * 4 ); 
-	uint8_t * text_buffer = ts.text_buffer = malloc( ts.charx * ts.chary );
-	unsigned char * attrib_buffer = ts.attrib_buffer = malloc( ts.charx * ts.chary );
-	unsigned char * color_buffer  = ts.color_buffer =  malloc( ts.charx * ts.chary );
-	ts.taint_buffer = calloc( ts.charx, ts.chary );
-
+	uint32_t * framebuffer = malloc( ts.charx * ts.chary * font_w * font_h * 4 *(CHAR_DOUBLE+1)*(CHAR_DOUBLE+1));
+	ts.termbuffer = 0;
 	ResetTerminal( &ts );
-
 	char * localargv[] = { "/bin/bash", 0 };
 	ts.ptspipe = spawn_process_with_pts( "/bin/bash", localargv, &ts.pid );
-
-	{
-		struct winsize tsize;
-		tsize.ws_col = INIT_CHARX;
-		tsize.ws_row = INIT_CHARY;
-		tsize.ws_xpixel = INIT_CHARX*font_w;
-		tsize.ws_ypixel = INIT_CHARY*font_h;
-		ioctl(ts.ptspipe, TIOCSWINSZ, &tsize);
-	}
+	ResizeScreen( &ts, ts.charx, ts.chary );
 
 	OGCreateThread( rxthread, (void*)&ts );
 
@@ -284,24 +270,42 @@ int main()
 	{
 		int x, y;
 		CNFGHandleInput();
+		short screenx, screeny;
+		CNFGGetDimensions( &screenx, &screeny );
+		int newx = screenx/font_w;
+		int newy = screeny/font_h;
 
+		if( (newx != ts.charx || newy != ts.chary) && newy > 0 && newx > 0 )
+		{
+			ResizeScreen( &ts, newx, newy );
+			w = ts.charx * font_w * (CHAR_DOUBLE+1);
+			h = ts.chary * font_h * (CHAR_DOUBLE+1);
+			framebuffer = realloc( framebuffer, w*h*4 );
+			if( last_cury >= ts.chary ) last_cury = ts.chary-1;
+		}
 
 		if( last_curx != ts.curx || last_cury != ts.cury || ts.tainted )
 		{
+			OGLockMutex( ts.screen_mutex );
+			uint32_t * tb = ts.termbuffer;
 			ts.tainted = 0;
-			ts.taint_buffer[last_curx+last_cury*ts.charx] = 1;
-			ts.taint_buffer[ts.curx + ts.cury * ts.charx] = 1;
+			if( last_curx < ts.charx && last_cury < ts.chary )
+				tb[last_curx+last_cury*ts.charx] |= 1<<24;
+			if( ts.curx < ts.charx && ts.cury < ts.chary )
+				tb[ts.curx + ts.cury * ts.charx] |= 1<<24;
 			last_curx = ts.curx;
 			last_cury = ts.cury;
 
 			for( y = 0; y < ts.chary; y++ )
 			for( x = 0; x < ts.charx; x++ )
 			{
-				if( !ts.taint_buffer[x+y*ts.charx] ) continue;
-				ts.taint_buffer[x+y*ts.charx] = 0;
-				unsigned char c = text_buffer[x+y*ts.charx];
-				int color = ts.color_buffer[x+y*ts.charx];
-				int attrib = ts.attrib_buffer[x+y*ts.charx];
+				uint32_t v = tb[x+y*ts.charx];
+				if( ! (v & (1<<24)) ) continue;
+				tb[x+y*ts.charx] &= ~(1<<24);
+				unsigned char c = v & 0xff;
+				int color = v>>16;
+				int attrib = v>>8;
+
 				int cx, cy;
 				int atlasx = c & 0x0f;
 				int atlasy = c >> 4;
@@ -335,6 +339,7 @@ int main()
 				}
 		#endif
 			}
+			OGUnlockMutex( ts.screen_mutex );
 			CNFGUpdateScreenWithBitmap( (unsigned long *)framebuffer, w, h );
 		}
 		else
@@ -370,9 +375,9 @@ int main()
 
 
 
-
+#ifdef DO_EXTRA_ST_WORK
 #include <pwd.h>
-
+#endif
 
 int spawn_process_with_pts( const char * execparam, char * const argv[], int * pid )
 {
@@ -395,8 +400,8 @@ int spawn_process_with_pts( const char * execparam, char * const argv[], int * p
 		close( 1 );
 		close( 2 );
 		r = open( slavepath, O_RDWR | O_NOCTTY ); //Why did the previous example have the O_NOCTTY flag?
-		if (ioctl(r, TIOCSCTTY, NULL) < 0)
-			fprintf(stderr, "ioctl TIOCSCTTY failed: %s\n", strerror(errno));
+		//if (ioctl(r, TIOCSCTTY, NULL) < 0)
+		//	fprintf(stderr, "ioctl TIOCSCTTY failed: %s\n", strerror(errno));
 		dup2( r, 0 );
 		dup2( r, 1 );
 		dup2( r, 2 );
@@ -404,6 +409,7 @@ int spawn_process_with_pts( const char * execparam, char * const argv[], int * p
 
 		//From ST
 		{
+#ifdef DO_EXTRA_ST_WORK
 			const struct passwd *pw;
 			char *sh, *prog;
 
@@ -428,6 +434,7 @@ int spawn_process_with_pts( const char * execparam, char * const argv[], int * p
 			setenv("USER", pw->pw_name, 1);
 			setenv("SHELL", sh, 1);
 			setenv("HOME", pw->pw_dir, 1);
+#endif
 			setenv("TERM", "xterm", 1);
 		}
 		execvp( execparam, argv );

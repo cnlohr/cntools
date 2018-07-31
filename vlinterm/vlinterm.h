@@ -11,10 +11,13 @@
 struct TermStructure
 {
 	int ptspipe;
-	uint8_t * text_buffer;
-	uint8_t * attrib_buffer;
-	uint8_t * color_buffer;
-	uint8_t * taint_buffer;
+
+	uint32_t * termbuffer;
+	// text  <<lsB
+	// attrib
+	// color
+	// taint <<msB
+
 	uint8_t tainted;
 	int current_color;
 	int current_attributes;
@@ -52,6 +55,7 @@ struct TermStructure
 void EmitChar( struct TermStructure * ts, int crx );
 void ResetTerminal( struct TermStructure * ts );
 int FeedbackTerminal( struct TermStructure * ts, const uint8_t * data, int len );
+void ResizeScreen( struct TermStructure * ts, int neww, int newh );
 
 //You must implement this.
 void HandleOSCCommand( struct TermStructure * ts, int parameter, const char * value );

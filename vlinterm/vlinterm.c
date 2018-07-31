@@ -1,26 +1,22 @@
+#define _GNU_SOURCE
+
 #include "vlinterm.h"
 #include <stdio.h>
 #include <string.h>
+#include <termios.h>
+#include <sys/ioctl.h>
 
 //#define DEBUG_VLINTERM
 
 static void BufferSet( struct TermStructure * ts, int start, int value, int length )
 {
-	int valuec = ts->current_color;
-	int valueatt = ts->current_attributes;
-	if( length == 1 )
+	uint32_t v = value | ts->current_attributes << 8 | ts->current_color << 16 | 1<<24;
+	int i;
+	length+=start;
+	for( i = start; i < length; i++ )
 	{
-		ts->text_buffer[start] = value;
-		ts->color_buffer[start] = ts->current_color;
-		ts->attrib_buffer[start] = ts->current_attributes;
+		ts->termbuffer[i] = v;
 	}
-	else
-	{
-		memset( ts->text_buffer + start, value, length );
-		memset( ts->attrib_buffer + start, valueatt, length );
-		memset( ts->color_buffer + start, valuec, length );
-	}
-	memset( ts->taint_buffer + start, 1, length );
 	ts->tainted = 1;
 }
 
@@ -64,21 +60,16 @@ static void BufferCopy( struct TermStructure * ts, int dest, int src, int length
 	if( ( dest > src && src + length >= dest ) ||
 		( src > dest && dest + length >= src ) )
 	{
-		char temp[length];
-		memcpy( temp,   ts->text_buffer + src, length );	
-		memcpy( ts->text_buffer + dest, temp, length );	
-		memcpy( temp,   ts->attrib_buffer + src, length );	
-		memcpy( ts->attrib_buffer + dest, temp, length );	
-		memcpy( temp,   ts->color_buffer + src, length );	
-		memcpy( ts->color_buffer + dest, temp, length );	
+		char temp[length*4];
+		memcpy( temp,  ts->termbuffer + src, length*4 );	
+		memcpy( ts->termbuffer + dest, temp, length*4 );	
 	}
 	else
 	{
-		memcpy( ts->text_buffer + dest,   ts->text_buffer + src, length );
-		memcpy( ts->attrib_buffer + dest, ts->attrib_buffer + src, length );
-		memcpy( ts->color_buffer + dest,  ts->color_buffer + src, length );
+		memcpy( ts->termbuffer + dest,   ts->termbuffer + src, length*4 );
 	}
-	memset( ts->taint_buffer + dest, 1, length );
+	int i;
+	for( i = 0; i < length; i++ ) ts->termbuffer[i+dest] |= (1<<24);
 	ts->tainted = 1;
 }
 
@@ -103,9 +94,11 @@ void ResetTerminal( struct TermStructure * ts )
 	ts->scroll_top = -1;
 	ts->scroll_bottom = -1;
 
+	if( !ts->termbuffer )
+		ResizeScreen( ts, ts->charx, ts->chary );
 	BufferSet( ts, 0, 0, ts->charx * ts->chary );
-	UpdateTopBottom( ts );
 }
+
 
 int FeedbackTerminal( struct TermStructure * ts, const uint8_t * data, int len )
 {
@@ -156,7 +149,6 @@ void EmitChar( struct TermStructure * ts, int crx )
 #ifdef DEBUG_VLINTERM
 	fprintf( stderr, "(%d %d %c)", crx, ts->curx, crx );
 #endif
-
 	OGLockMutex( ts->screen_mutex );
 	if( crx == '\r' ) { goto linefeed; }
 	else if( crx == '\n' ) { goto newline; }
@@ -205,7 +197,7 @@ void EmitChar( struct TermStructure * ts, int crx )
 				case '=': ts->dec_keypad_mode = 1; break;
 				case '>': ts->dec_keypad_mode = 2; break;
 				case ']': goto csi_state_start;
-				case '(': ts->escapestate = 4; break; //Start sequence defining G0 character set
+				case '(': ts->escapestate = 4; break; //Start sequence defining G0 character set (Currently not implemented)
 				//case ')':
 				//case '%':
 				//case '(': ts->escapestate = 5; break;
@@ -521,3 +513,46 @@ end:
 	OGUnlockMutex( ts->screen_mutex );
 }
 
+
+void ResizeScreen( struct TermStructure * ts, int neww, int newh )
+{
+	if( (ts->termbuffer && newh == ts->chary && neww == ts->charx ) || neww < 1 || newh < 1 ) return;
+	OGLockMutex( ts->screen_mutex );
+	uint32_t * oldbuffer = ts->termbuffer;
+	ts->termbuffer = calloc( neww, newh * 4 );
+	if( oldbuffer )
+	{
+		int line;
+		int mx = (neww<ts->charx)?neww:ts->charx;
+		int ml = (newh<ts->chary)?newh:ts->chary;
+		int ch;
+		for( line = 0; line < newh; line++ )
+		{
+			for( ch = 0; ch < neww; ch++ )
+			{
+				uint32_t och = 1<<24;
+				if( line < ts->chary && ch < ts->charx )
+					och = oldbuffer[line * ts->charx + ch];
+				ts->termbuffer[line*neww+ch] = och | 1<<24;
+			}
+		}
+		free( oldbuffer );
+	}
+
+	if( ts->ptspipe )
+	{
+		struct winsize tsize;
+		tsize.ws_col = neww;
+		tsize.ws_row = newh;
+		tsize.ws_xpixel = neww;
+		tsize.ws_ypixel = newh;
+		ioctl(ts->ptspipe, TIOCSWINSZ, &tsize);
+	}
+	ts->charx = neww;
+	ts->chary = newh;
+
+	ts->tainted = 1;
+	UpdateTopBottom( ts );
+
+	OGUnlockMutex( ts->screen_mutex );
+}
