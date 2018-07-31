@@ -268,6 +268,8 @@ int main()
 		struct winsize tsize;
 		tsize.ws_col = INIT_CHARX;
 		tsize.ws_row = INIT_CHARY;
+		tsize.ws_xpixel = INIT_CHARX*font_w;
+		tsize.ws_ypixel = INIT_CHARY*font_h;
 		ioctl(ts.ptspipe, TIOCSWINSZ, &tsize);
 	}
 
@@ -393,6 +395,8 @@ int spawn_process_with_pts( const char * execparam, char * const argv[], int * p
 		close( 1 );
 		close( 2 );
 		r = open( slavepath, O_RDWR | O_NOCTTY ); //Why did the previous example have the O_NOCTTY flag?
+		if (ioctl(r, TIOCSCTTY, NULL) < 0)
+			fprintf(stderr, "ioctl TIOCSCTTY failed: %s\n", strerror(errno));
 		dup2( r, 0 );
 		dup2( r, 1 );
 		dup2( r, 2 );

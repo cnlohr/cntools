@@ -502,7 +502,10 @@ linefeed:
 
 newline:
 	ts->cury ++;
-	ts->curx = 0;
+	if( !( ts->dec_private_mode & 0x80 ) ) //XXX: This is PROBABLY wrong, but seems to fix SL and some other things like it.
+	{
+		ts->curx = 0;
+	}
 	HandleNewline( ts, 1 );
 	goto end;
 
