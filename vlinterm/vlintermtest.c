@@ -5,7 +5,6 @@
 #include <unistd.h>
 #include <os_generic.h>
 #include <string.h>
-#include <fcntl.h>
 #include <sys/ioctl.h>
 #include <signal.h>
 #include <errno.h>
@@ -83,7 +82,9 @@ void * rxthread( void * v )
 
 void HandleOSCCommand( struct TermStructure * ts, int parameter, const char * value )
 {
-	printf( "OSC Command: %d: %s\n", parameter, value );
+	if( parameter == 0 ) CNFGChangeWindowTitle( value );
+	else
+		printf( "OSC Command: %d: %s\n", parameter, value );
 }
 
 void HandleBell( struct TermStructure * ts )
@@ -94,13 +95,14 @@ void HandleBell( struct TermStructure * ts )
 
 extern int g_x_do_key_decode;
 
+
 void HandleKey( int keycode, int bDown )
 {
 	static int shift_held;
 	static int ctrl_held;
 	static int alt_held;
 
-	if( keycode == 65506 )
+	if( keycode == 65506 || keycode == 65505 )
 	{
 		shift_held = bDown;
 	}
@@ -114,101 +116,142 @@ void HandleKey( int keycode, int bDown )
 	}
 	else if( bDown )
 	{
-		int len = 0;
-		const char * str = 0;
-		char cc[3] = { keycode };
-
-		if( keycode == 65293 || keycode == 65421 )
+		if( shift_held && keycode == 65366 )
 		{
-			//Enter key: Be careful with these...
-			cc[0] = '\x0d';
-			len = 1;
-			if( ts.dec_private_mode & (1<<20) )
-			{
-				cc[1] = '\x0a';
-				len = 2;
-			}
-			str = cc;
+			TermScroll( &ts, -ts.chary/2 );
 		}
-		else if( keycode >= 255 )
+		else if( shift_held && keycode == 65365 )
 		{
-			struct KeyLooup
+			TermScroll( &ts, ts.chary/2 );
+		}
+		else
+		{
+			int len = 0;
+			const char * str = 0;
+			char cc[3] = { keycode };
+
+			if( keycode == 65293 || keycode == 65421 )
 			{
-				unsigned short key;
-				short stringlen;
-				const char * string;
-			};
-			const struct KeyLooup keys[] = {
-				{ 65288, 1, "\x08" },
-				{ 65289, 1, "\x09" },
-				{ 65307, 1, "\x1b" },
-				{ 65362, 3, "\x1b[A" },  //Up
-				{ 65364, 3, "\x1b[B" },  //Down
-				{ 65361, 3, "\x1b[D" },  //Left
-				{ 65363, 3, "\x1b[C" },  //Right
-				{ 65366, 4, "\x1b[6~" }, //PgDn
-				{ 65365, 4, "\x1b[5~" }, //PgUp
-				{ 65367, 3, "\x1b[F" },  //Home
-				{ 65360, 3, "\x1b[H" },  //End
-				{ 65535, 4, "\x1b[3~" }, //Del
-				{ 65379, 4, "\x1b[4~" }, //Ins
-				{ 255, 0, "" },
-			};
-			int i;
-			for( i = 0; i < sizeof(keys)/sizeof(keys[0]); i++ )
-			{
-				if( keys[i].key == keycode )
+				//Enter key: Be careful with these...
+				cc[0] = '\x0d';
+				len = 1;
+				if( ts.dec_private_mode & (1<<20) )
 				{
-					len = keys[i].stringlen;
-					str = keys[i].string;
-					break;
+					cc[1] = '\x0a';
+					len = 2;
 				}
+				str = cc;
+				ts.scrollback = 0;
 			}
-			if( i == sizeof(keys)/sizeof(keys[0]) ) fprintf( stderr, "Unmapped key %d\n", keycode );
-		} else
-		{
-			extern int g_x_global_key_state;
-			extern int g_x_global_shift_key;
-			if( (g_x_global_key_state & 2) && !(g_x_global_key_state & 2) )
+			else if( keycode >= 255 )
 			{
-				if( keycode >= 'a' && keycode <= 'z' )
+				struct KeyLooup
+				{
+					unsigned short key;
+					short stringlen;
+					const char * string;
+				};
+				const struct KeyLooup keys[] = {
+					{ 65362, 3, "\x1b[A" },  //Up
+					{ 65364, 3, "\x1b[B" },  //Down
+					{ 65361, 3, "\x1b[D" },  //Left
+					{ 65363, 3, "\x1b[C" },  //Right
+					{ 65288, 1, "\x08" },
+					{ 65289, 1, "\x09" },
+					{ 65307, 1, "\x1b" },
+					{ 65366, 4, "\x1b[6~" }, //PgDn
+					{ 65365, 4, "\x1b[5~" }, //PgUp
+					{ 65367, 3, "\x1b[F" },  //Home
+					{ 65360, 3, "\x1b[H" },  //End
+					{ 65535, 4, "\x1b[3~" }, //Del
+					{ 65379, 4, "\x1b[4~" }, //Ins
+					{ 255, 0, "" },
+				};
+				int i;
+				for( i = 0; i < sizeof(keys)/sizeof(keys[0]); i++ )
+				{
+					if( keys[i].key == keycode )
+					{
+						len = keys[i].stringlen;
+						str = keys[i].string;
+						break;
+					}
+				}
+				if( i < 4 && ( ts.dec_private_mode & 2 ) ) 			//Handle DECCKM, not sure why but things like alsamixer require it.
+				{
+					cc[0] = '\x1b';
+					cc[1] = 'O';
+					cc[2] = str[2];
+					str = cc;
+				}
+				if( i == sizeof(keys)/sizeof(keys[0]) ) fprintf( stderr, "Unmapped key %d\n", keycode );
+			} else
+			{
+				extern int g_x_global_key_state;
+				extern int g_x_global_shift_key;
+				if( (g_x_global_key_state & 2) && !(g_x_global_key_state & 2) )
+				{
+					if( keycode >= 'a' && keycode <= 'z' )
+						keycode = g_x_global_shift_key;
+				}
+				else if( g_x_global_key_state & 1 )
+				{
 					keycode = g_x_global_shift_key;
-			}
-			else if( g_x_global_key_state & 1 )
-			{
-				keycode = g_x_global_shift_key;
-			}
-			else if( ctrl_held )
-			{
-				if( keycode == 'c' )
-				{
-					kill( tcgetpgrp(ts.ptspipe), SIGINT );
-					return;
 				}
-				else if( keycode >= 'a' && keycode <= 'z' )
+				else if( ctrl_held )
 				{
-					keycode = keycode - 'a' + 1;
+					if( keycode == 'c' )
+					{
+						kill( tcgetpgrp(ts.ptspipe), SIGINT );
+						return;
+					}
+					else if( keycode >= 'a' && keycode <= 'z' )
+					{
+						keycode = keycode - 'a' + 1;
+					}
+					else if( keycode == ']' )
+					{
+						keycode = 0x1d;
+					}
 				}
-				else if( keycode == ']' )
-				{
-					keycode = 0x1d;
-				}
+				cc[0] = keycode;
+				str = cc;
+				len = 1;
 			}
-			cc[0] = keycode;
-			str = cc;
-			len = 1;
-		}
 
-		int i;
-		for( i = 0; i < len; i++ )
-		{
-			FeedbackTerminal( &ts, str + i, 1 );
-			if( ts.echo ) EmitChar( &ts, str[i] );
+			int i;
+			for( i = 0; i < len; i++ )
+			{
+				FeedbackTerminal( &ts, str + i, 1 );
+				if( ts.echo ) EmitChar( &ts, str[i] );
+			}
 		}
 	}
 }
 
-void HandleButton( int x, int y, int button, int bDown ) { }
+void HandleButton( int x, int y, int button, int bDown )
+{
+	if( button == 5 || button == 4 && bDown )
+	{
+		if( ts.dec_private_mode & (1<<29) )
+		{
+			char cc[3] = { '\x1b', '[', (button == 4)?'A':'B' };
+			FeedbackTerminal( &ts, cc, 3 );
+		}
+		else
+		{
+			TermScroll( &ts, (button==5)?-1:1 );
+		}
+	}
+	else if( ts.dec_private_mode & (1<<30) )
+	{
+		x /= font_w;
+		y /= font_h;
+		char cc[6] = { '\x1b', '[', 'M', (bDown?0x20:0x23), x+0x21, y+0x21 };
+		FeedbackTerminal( &ts, cc, 6 );
+	}
+}
+
 void HandleMotion( int x, int y, int mask ) { }
 void HandleDestroy() { }
 
@@ -248,6 +291,7 @@ int main()
 	ts.charx = INIT_CHARX;
 	ts.chary = INIT_CHARY;
 	ts.echo = 0;
+	ts.historyy = 1000;
 	short w = ts.charx * font_w * (CHAR_DOUBLE+1);
 	short h = ts.chary * font_h * (CHAR_DOUBLE+1);
 	CNFGSetup( "Test terminal", w, h );
@@ -258,13 +302,11 @@ int main()
 	char * localargv[] = { "/bin/bash", 0 };
 	ts.ptspipe = spawn_process_with_pts( "/bin/bash", localargv, &ts.pid );
 	ResizeScreen( &ts, ts.charx, ts.chary );
-
 	OGCreateThread( rxthread, (void*)&ts );
 
 	usleep(10000);
-//	FeedbackTerminal( &ts, "script /dev/null\n", 17 );
-//	FeedbackTerminal( &ts, "export TERM=linux\n", 18 );
 
+	int last_scrollback;
 	int last_curx = 0, last_cury = 0;
 	while(1)
 	{
@@ -284,7 +326,12 @@ int main()
 			if( last_cury >= ts.chary ) last_cury = ts.chary-1;
 		}
 
-		if( last_curx != ts.curx || last_cury != ts.cury || ts.tainted )
+		int scrollback = ts.scrollback;
+		if( scrollback >= ts.historyy-ts.chary ) scrollback = ts.historyy-ts.chary-1;
+		if( scrollback < 0 ) scrollback = 0;
+		int taint_all = scrollback != last_scrollback;
+
+		if( last_curx != ts.curx || last_cury != ts.cury || ts.tainted || taint_all )
 		{
 			OGLockMutex( ts.screen_mutex );
 			uint32_t * tb = ts.termbuffer;
@@ -299,9 +346,11 @@ int main()
 			for( y = 0; y < ts.chary; y++ )
 			for( x = 0; x < ts.charx; x++ )
 			{
-				uint32_t v = tb[x+y*ts.charx];
-				if( ! (v & (1<<24)) ) continue;
-				tb[x+y*ts.charx] &= ~(1<<24);
+				int ly = y - scrollback;
+
+				uint32_t v = tb[x+ly*ts.charx];
+				if( !taint_all && !(v & (1<<24)) ) continue;
+				tb[x+ly*ts.charx] &= ~(1<<24);
 				unsigned char c = v & 0xff;
 				int color = v>>16;
 				int attrib = v>>8;
@@ -311,7 +360,7 @@ int main()
 				int atlasy = c >> 4;
 				uint32_t * fbo =   &framebuffer[x*font_w*(CHAR_DOUBLE+1) + y*font_h*w*(CHAR_DOUBLE+1)];
 				uint32_t * start = &font[atlasx*font_w+atlasy*font_h*charset_w];
-				int is_cursor = (x == ts.curx && y == ts.cury) && (ts.dec_private_mode & (1<<25));
+				int is_cursor = (x == ts.curx && ly == ts.cury) && (ts.dec_private_mode & (1<<25));
 		#if CHAR_DOUBLE==1
 				for( cy = 0; cy < font_h; cy++ )
 				{
@@ -350,107 +399,12 @@ int main()
 				waittoupdate = 0;
 				CNFGUpdateScreenWithBitmap( (unsigned long *)framebuffer, w, h );
 			}
-			
-			
 		}
 		usleep(20000);
+		last_scrollback = scrollback;
 	//	CNFGSwapBuffers();
 	}
 
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#ifdef DO_EXTRA_ST_WORK
-#include <pwd.h>
-#endif
-
-int spawn_process_with_pts( const char * execparam, char * const argv[], int * pid )
-{
-	int r = getpt();
-	if( r <= 0 ) return -1;
-	if( grantpt(r) ) return -2;
-	if( unlockpt( r ) ) return -3;
-	char slavepath[64];
-	if(ptsname_r(r, slavepath, sizeof(slavepath)) < 0)
-	{
-		return -4;
-	}
-
-
-	int rforkv = fork();
-	if (rforkv == 0)
-	{
-		close( r ); //Close master
-		close( 0 );
-		close( 1 );
-		close( 2 );
-		r = open( slavepath, O_RDWR | O_NOCTTY ); //Why did the previous example have the O_NOCTTY flag?
-		//if (ioctl(r, TIOCSCTTY, NULL) < 0)
-		//	fprintf(stderr, "ioctl TIOCSCTTY failed: %s\n", strerror(errno));
-		dup2( r, 0 );
-		dup2( r, 1 );
-		dup2( r, 2 );
-		setsid();
-
-		//From ST
-		{
-#ifdef DO_EXTRA_ST_WORK
-			const struct passwd *pw;
-			char *sh, *prog;
-
-			errno = 0;
-			if ((pw = getpwuid(getuid())) == NULL) {
-				if (errno)
-					fprintf( stderr, "getpwuid:%s\n", strerror(errno));
-				else
-					fprintf( stderr, "who are you?\n");
-			}
-
-			if ((sh = getenv("SHELL")) == NULL)
-				sh = (pw->pw_shell[0]) ? pw->pw_shell : "bash";
-
-			prog = sh;
-			//DEFAULT(args, ((char *[]) {prog, NULL}));
-
-			unsetenv("COLUMNS");
-			unsetenv("LINES");
-			unsetenv("TERMCAP");
-			setenv("LOGNAME", pw->pw_name, 1);
-			setenv("USER", pw->pw_name, 1);
-			setenv("SHELL", sh, 1);
-			setenv("HOME", pw->pw_dir, 1);
-#endif
-			setenv("TERM", "xterm", 1);
-		}
-		execvp( execparam, argv );
-	}
-	else
-	{
-		//https://stackoverflow.com/questions/13849582/sending-signal-to-a-forked-process-that-calls-exec
-		//setpgid(rforkv, 0);   //Why is this mutually exclusive with setsid()?
-		if( rforkv < 0 )
-		{
-			close( r );
-			return -10;
-		}
-		*pid = rforkv;
-		return r;
-	}
 }
 
 

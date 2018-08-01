@@ -5,14 +5,21 @@
 #include <string.h>
 #include <termios.h>
 #include <sys/ioctl.h>
+#include <fcntl.h>
 
 //#define DEBUG_VLINTERM
 
+//TODO: Memoize ts->charx
+
 static void BufferSet( struct TermStructure * ts, int start, int value, int length )
 {
+	int cx = ts->charx;
+	int cy = ts->chary;
 	uint32_t v = value | ts->current_attributes << 8 | ts->current_color << 16 | 1<<24;
 	int i;
 	length+=start;
+	if( start < 0 ) start = 0;
+	if( length >= cx*cy ) length = cx*cy;
 	for( i = start; i < length; i++ )
 	{
 		ts->termbuffer[i] = v;
@@ -22,26 +29,29 @@ static void BufferSet( struct TermStructure * ts, int start, int value, int leng
 
 static void BufferCopy( struct TermStructure * ts, int dest, int src, int length )
 {
-	if( src < 0 ) { 
+	int cx = ts->charx;
+	int cy = ts->chary;
+	int minimum = (cy-ts->historyy)*cx;
+	if( src < minimum ) { 
 #ifdef DEBUG_VLINTERM
 		fprintf( stderr, "invalid buffer copy [0]\n" );
 #endif
 		return;
 	} 
-	if( dest < 0 ) {
+	if( dest < minimum ) {
 #ifdef DEBUG_VLINTERM
 		fprintf( stderr, "invalid buffer copy [1]\n" ); 
 #endif
 		return;
 	} 
-	if( src + length > ts->charx*ts->chary )
+	if( src + length > cx*cy )
 	{
 #ifdef DEBUG_VLINTERM
 		fprintf( stderr, "invalid buffer copy [2]\n" );
 #endif
 		return;
 	} 
-	if( dest + length > ts->charx*ts->chary ) {
+	if( dest + length > cx*cy ) {
 #ifdef DEBUG_VLINTERM
 		fprintf( stderr, "invalid buffer copy [3]\n" );
 #endif
@@ -83,6 +93,7 @@ void ResetTerminal( struct TermStructure * ts )
 {
 	ts->dec_private_mode = /*(1<<12) |*/ (1<<25); //Enable cursor.
 	ts->dec_mode = 0;
+	ts->scrollback = 0;
 
 	ts->curx = ts->cury = 0;
 	ts->echo = 0;
@@ -126,8 +137,19 @@ static int ScrollDown( struct TermStructure * ts, int lines )
 
 static int ScrollUp( struct TermStructure * ts, int lines )
 {
-	BufferCopy( ts, ts->top*ts->charx, (ts->top+lines)*ts->charx, (ts->bottom-ts->top-lines)*ts->charx );
-	BufferSet( ts, (ts->bottom-lines)*ts->charx, 0, ts->charx*lines );
+	if( ts->scroll_top > 0 || ( ts->scroll_bottom < ts->chary - 1 && ts->scroll_bottom >= 0 ) )
+	{
+		//Do a limited scroll
+		BufferCopy( ts, ts->top*ts->charx, (ts->top+lines)*ts->charx, (ts->bottom-ts->top-lines)*ts->charx );
+		BufferSet( ts, (ts->bottom-lines)*ts->charx, 0, ts->charx*lines );
+	}
+	else
+	{
+		//Scroll up into the history buffer...
+		int dest = (ts->chary-ts->historyy)*ts->charx;
+		BufferCopy( ts, dest, dest+lines*ts->charx, (ts->historyy-lines)*ts->charx );
+		BufferSet( ts, (ts->bottom-lines)*ts->charx, 0, ts->charx*lines );
+	}
 }
 
 static void HandleNewline( struct TermStructure * ts, int advance )
@@ -145,28 +167,27 @@ static void HandleNewline( struct TermStructure * ts, int advance )
 
 void EmitChar( struct TermStructure * ts, int crx )
 {
-
 #ifdef DEBUG_VLINTERM
-	fprintf( stderr, "(%d %d %c)", crx, ts->curx, crx );
+//	fprintf( stderr, "(%d %d %c)", crx, ts->curx, crx );
 #endif
+	int cx = ts->charx;
+
 	OGLockMutex( ts->screen_mutex );
 	if( crx == '\r' ) { goto linefeed; }
 	else if( crx == '\n' ) { goto newline; }
 	else if( crx == 7 && ts->escapestate != 3 /* Make sure we're not in the OSC CSI */ ) { HandleBell( ts ); }
 	else if( crx == 8 ) {
 		if( ts->curx ) ts->curx--;
-		//BufferSet( ts, ts->curx+ts->cury*ts->charx, 0, 1 );
 	}
-	else if( crx == 9 ) {
+	else if( crx == 9 ) { 	/*tabstop*/
 			ts->curx = (ts->curx & (~7)) + 8;
-			if( ts->curx >= ts->charx )
-				ts->curx = ts->charx-1;
-			/*tabstop*/
+			if( ts->curx >= cx )
+				ts->curx = cx-1;
 			}
-	else if( crx == 0x0f || crx == 0x0e ) { /*Activate other charsets*/ }
-	else if( crx == 0x18 || crx == 0x1a ) { ts->escapestate = 0; }
-	else if( crx == 0x1b ) { ts->escapestate = 1; }
-	else if( crx == 0x9b ) { goto csi_state_start; }
+	else if( crx == 0x0f || crx == 0x0e ) { /*Activate other charsets (unimplemented)*/ }
+	else if( crx == 0x18 || crx == 0x1a ) ts->escapestate = 0;
+	else if( crx == 0x1b ) ts->escapestate = 1;
+	else if( crx == 0x9b ) goto csi_state_start;
 	else if( ts->escapestate )
 	{
 		if( ts->escapestate == 1 )
@@ -183,11 +204,11 @@ void EmitChar( struct TermStructure * ts, int crx )
 				//case 'H': break; //Set tabstop
 				case 'M':	//Reverse linefeed.
 					ts->cury--;
-					if( ts->cury < ts->scroll_top )
+					if( ts->cury < ts->top )
 					{
-						BufferCopy( ts, ts->charx*(ts->scroll_top+1), ts->charx*ts->scroll_top, (ts->scroll_bottom - ts->scroll_top - 1) * ts->charx );
-						BufferSet( ts, ts->charx*ts->scroll_top, 0, ts->charx );
-						ts->cury = ts->scroll_top;
+						BufferCopy( ts, cx*(ts->top+1), cx*ts->top, (ts->bottom - ts->top - 1) * cx );
+						BufferSet( ts, cx*ts->top, 0, cx );
+						ts->cury = ts->top;
 					} 
 					break;
 				//case 'Z': FeedbackTerminal( ts, "\x1b[?6c", 5 ); break;
@@ -199,7 +220,7 @@ void EmitChar( struct TermStructure * ts, int crx )
 				case ']': goto csi_state_start;
 				case '(': ts->escapestate = 4; break; //Start sequence defining G0 character set (Currently not implemented)
 				//case ')':
-				//case '%':
+				//case '%': break; //Select unicode/ISO 646, ISO 8859-1 charsets, but it doens't seem people follow this rule.
 				//case '(': ts->escapestate = 5; break;
 				default: 
 #ifdef DEBUG_VLINTERM
@@ -223,44 +244,68 @@ void EmitChar( struct TermStructure * ts, int crx )
 			{
 				ts->dec_priv_csi = 1;
 			}
-			//A CSI control message.
-			else if( crx >= '0' && crx <= '9' )
+			else if( crx >= '0' && crx <= '9' ) 			//A CSI control message, but the numbers part
 			{
 				if( ts->csistate[ts->whichcsi] < 0 ) ts->csistate[ts->whichcsi] = 0;
 				ts->csistate[ts->whichcsi] *= 10;
 				ts->csistate[ts->whichcsi] += crx - '0';
 			}
-			else if( ts->dec_priv_csi )
+			else if( ts->escapestate == 4 )
+			{
+				//Charset or other escape sequence (Not implemented yet)
+				ts->escapestate = 0;
+			}
+			else
 			{
 				ts->escapestate = 0;
 				int is_seq_default = ts->csistate[ts->whichcsi] < 0;
 				if( is_seq_default ) ts->csistate[ts->whichcsi] = 1; //Default
+				int cs0 = ts->csistate[0];
+				int cs1 = ts->csistate[1];
 
 #ifdef DEBUG_VLINTERM
-				fprintf( stderr, "DEC PRIV CSI: '%c' %d %d / %d[%c]\n", crx, ts->csistate[0], ts->csistate[1], ts->dec_priv_csi, ts->dec_priv_csi );
+				if( crx != ';' ) fprintf( stderr, "CRX: %d %d  %d %d %c\n", cs0, cs1, ts->curx, ts->cury, crx );
 #endif
-				int set = -1;
-				if( crx == 'c' )
+				//This is the big list of CSI escapes.
+				switch( crx )
 				{
-#ifdef DEBUG_VLINTERM
-					fprintf( stderr, "Got a private [?c - not sure what to do with it.\n" );
-#endif
-					//What is this?!?
-					//char sto[128];
-					//int len = sprintf( sto, "\x1b[?1;2c,\"I am a VT100 with advanced video option\"\x1b\\" );
-					//int len = sprintf( sto, "\x1b[?6c:\"I am a VT102\"\\" );
-					//FeedbackTerminal( ts, sto, len );
+				case '@': 
+				{
+					//Insert specified # of characters.
+					int chars = cs0;
+					int start = cx*ts->cury+ts->curx;
+					BufferCopy( ts, start + chars, start, cx-chars-ts->curx );
+					BufferSet( ts, start, 0, chars ); 
+					break;
 				}
-				else
+				case 'F': ts->curx = 0; //Don't break!  This F does A as well.
+				case 'A': ts->cury -= cs0; break;
+				case 'E': ts->curx = 0;	//Don't break!  This E does B as well.
+				case 'B': ts->cury += cs0; break; //CUD—Cursor Down
+				case 'C': ts->curx += cs0; break; //CUF—Cursor Forward
+				case 'D': ts->curx -= cs0; ts->curx = 0; break;
+				case 'G': ts->curx = cs0 - 1; break;
+				case 'd': ts->cury = cs0 - 1; break;
+				case ';': ts->escapestate = 2; if( ts->whichcsi < MAX_CSI_PARAMS ) { ts->whichcsi++; ts->csistate[ts->whichcsi] = -1; } break;
+				case 'h': 
+				case 'l': //set or clear DEC or DEC private modes.
 				{
-					if( crx == 'h' ) set = 1;
-					else if( crx == 'l' ) set = 0;
-					if( set >= 0 )
+					int i;
+					int set = crx == 'h';
+					uint32_t dec = (ts->dec_priv_csi)?ts->dec_private_mode:ts->dec_mode;
+
+#ifdef DEBUG_VLINTERM
+					fprintf( stderr, "DEC CSI[%d]: '%c' %d %d / %d[%c]\n", ts->dec_priv_csi, crx, ts->csistate[0], ts->csistate[1], ts->dec_priv_csi, ts->dec_priv_csi );
+#endif
+					for( i = 0; i <= ts->whichcsi; i++ ) //Tricky: We want to do this for all parameters.
 					{
-						int bit = ts->csistate[ts->whichcsi];
-						if( bit == 1000 ) //X11 mouse reporting.
-							bit = 30;
-						if( bit > 30 || bit < 0 )
+						int bit = ts->csistate[i];
+						if( ts->dec_priv_csi ) switch( bit )
+							{
+							case 1049: bit = 29; break;//Scroll wheel does arrows.
+							case 1000: bit = 30; break;//X11 mouse reporting.
+							}
+						if( bit > 31|| bit < 0 )
 						{
 #ifdef DEBUG_VLINTERM
 							fprintf( stderr, "Error: Unknown DEC Private type %d\n", bit );
@@ -269,110 +314,73 @@ void EmitChar( struct TermStructure * ts, int crx )
 						else
 						{
 							if( set )
-								ts->dec_private_mode |= 1<<bit;
+								dec |= 1<<bit;
 							else
-								ts->dec_private_mode &= ~(1<<bit); 
-						}				
+								dec &= ~(1<<bit); 
+						}
 					}
+					if( ts->dec_priv_csi )
+						ts->dec_private_mode = dec;
 					else
-					{
-#ifdef DEBUG_VLINTERM
-						fprintf( stderr, "Error: Unknown DEC Private code ID %d (%c)\n", crx, crx );
-#endif
-					}
-				}
-			}
-			else if( ts->escapestate == 4 )
-			{
-				//Charset escape sequence (Not implemented yet)
-				ts->escapestate = 0;
-			}
-			else
-			{
-				ts->escapestate = 0;
-				int is_seq_default = ts->csistate[ts->whichcsi] < 0;
-				if( is_seq_default ) ts->csistate[ts->whichcsi] = 1; //Default
-
-#ifdef DEBUG_VLINTERM
-				if( crx != ';' ) fprintf( stderr, "CRX: %d %d  %d %d %c\n", ts->csistate[0], ts->csistate[1], ts->curx, ts->cury, crx );
-#endif
-				//This is the big list of CSI escapes.
-				switch( crx )
-				{
-				case '@': 
-				{
-					//Insert specified # of characters.
-					int chars = ts->csistate[0];
-					BufferCopy( ts, ts->charx*ts->cury, ts->charx*ts->cury-chars, chars );
-					BufferSet( ts, ts->charx*ts->cury + ts->charx, 0, chars ); 
+						ts->dec_mode = dec;
 					break;
 				}
-				case 'F': ts->curx = 0;
-				case 'A': ts->cury -= ts->csistate[0]; break;
-				case 'E': ts->curx = 0;
-				case 'B': ts->cury += ts->csistate[0]; break; //CUD—Cursor Down
-				case 'C': ts->curx += ts->csistate[0]; break; //CUF—Cursor Forward
-				case 'D': ts->curx -= ts->csistate[0]; ts->curx = 0; break;
-				case 'G': ts->curx = ts->csistate[0] - 1; break;
-				case 'd': ts->cury = ts->csistate[0] - 1; break;
-				case ';': ts->escapestate = 2; if( ts->whichcsi < MAX_CSI_PARAMS ) { ts->whichcsi++; ts->csistate[ts->whichcsi] = -1; } break;
-				case 'h': ts->dec_mode |= 1<<ts->csistate[0]; break;
-				case 'l': ts->dec_mode &= ~(1<<ts->csistate[0]); break;
+				case 's': ts->savex = ts->curx; ts->savey = ts->cury; break;
+				case 'u': ts->curx = ts->savex; ts->cury = ts->savey; break;
 				case 'S': //Scroll up
-					ScrollUp( ts, ts->csistate[0] );
+					ScrollUp( ts, cs0 );
 					break;
 				case 'T': //Scroll down
-					ScrollDown( ts, ts->csistate[0] );
+					ScrollDown( ts, cs0 );
 					break;
 				case 'f':
 				case 'H':	//CUP - Cursor Position
-					if( ts->csistate[0] <= 0 ) ts->csistate[0] = 1;
-					if( ts->csistate[1] <= 0 ) ts->csistate[1] = 1;
-					ts->curx = ts->csistate[1] - 1;
-					ts->cury = ts->csistate[0] - 1;
+					if( cs0 <= 0 ) cs0 = 1;
+					if( cs1 <= 0 ) cs1 = 1;
+					ts->curx = cs1 - 1;
+					ts->cury = cs0 - 1;
 					break;
 				case 'J':	//DECSED - Selective Erase in Display
 					{
-						int pos = ts->curx+ts->cury*ts->charx;
-						int end = ts->charx * ts->chary;
-						if( is_seq_default ) ts->csistate[0] = 0; 
-						switch( ts->csistate[0] ) 
+						int pos = ts->curx+ts->cury*cx;
+						int end = cx * ts->chary;
+						if( is_seq_default ) cs0 = 0; 
+						switch( cs0 ) 
 						{
-							case 0:	BufferSet( ts, pos, 0, end-pos ); break;
-							case 1:	BufferSet( ts, 0, 0, pos ); break;
-							case 2:	case 3:
-								BufferSet( ts, 0, 0, end ); break;
+							case 0:			BufferSet( ts, pos, 0, end-pos ); break;
+							case 1:			BufferSet( ts, 0, 0, pos ); break;
+							case 2:	case 3:	BufferSet( ts, 0, 0, end ); break;
 						}
 						ts->curx = 0;
 					}
 					break; 
 				case 'K':	//DECSEL - Selective Erase in Line
-					if( is_seq_default ) ts->csistate[0] = 0; 
-					switch( ts->csistate[0] )
+					if( is_seq_default ) cs0 = 0; 
+					switch( cs0 )
 					{
-					case 0: BufferSet( ts, ts->curx+ts->cury*ts->charx, 0, ts->charx-ts->curx ); break;
-					case 1:	BufferSet( ts, ts->cury*ts->charx, 0, ts->curx ); break;
-					case 2:	BufferSet( ts, ts->cury*ts->charx, 0, ts->charx ); break;
+					case 0: BufferSet( ts, ts->curx+ts->cury*cx, 0, cx-ts->curx ); break;
+					case 1:	BufferSet( ts, ts->cury*cx, 0, ts->curx ); break;
+					case 2:	BufferSet( ts, ts->cury*cx, 0, cx ); break;
 					}
 					break;
 				case 'L': //Inset blank lines.
 					{
-						int l = ts->csistate[0];
+						int l = cs0;
 						InsertBlankLines( ts, l );
 					}
 					break;
 				case 'M': //Delete the specified number of lines.
 				{
-					if( ts->csistate[0] > 0 )
+					if( cs0 > 0 )
 					{
-						int lines = ts->csistate[0];
+						int lines = cs0;
 						int startcopy = ts->cury;
 						int stopcopy = ts->scroll_bottom - lines;
-						if( startcopy < ts->scroll_top ) startcopy = ts->scroll_top;						
+						if( startcopy < ts->scroll_top ) startcopy = ts->scroll_top;		
 						if( stopcopy > startcopy )
 						{
-							BufferCopy( ts, startcopy*ts->charx, (lines+startcopy)*ts->charx, ts->charx*(stopcopy-startcopy) );
-							BufferSet( ts, stopcopy*ts->charx, 0, ts->charx * lines );
+							BufferCopy( ts, startcopy*cx, (lines+startcopy)*cx, cx*(stopcopy-startcopy) );
+							BufferSet( ts, stopcopy*cx, 0, cx * lines );
 						}
 					}
 					ts->curx = 0;
@@ -382,28 +390,31 @@ void EmitChar( struct TermStructure * ts, int crx )
 				case 'P': //DCH "Delete Character" "
 					{
 						//"As characters are deleted, the remaining characters between the cursor and right margin move to the left."
-						int chars_to_del = ts->csistate[0];
-						int remain_in_line = ts->charx - ts->curx;
+						int chars_to_del = (cs0<0)?1:cs0;
+						int remain_in_line = cx - ts->curx;
 						if( chars_to_del > remain_in_line ) remain_in_line = remain_in_line;
-						int start = ts->cury*ts->charx + ts->curx;
+						int start = ts->cury*cx + ts->curx;
 						int nr_after_shift = remain_in_line - chars_to_del-1;
-						int i;
-
-						BufferCopy( ts, start, start+i+chars_to_del, nr_after_shift+1 );
+						BufferCopy( ts, start, start+chars_to_del, nr_after_shift+1 );
 						BufferSet( ts, start+nr_after_shift, 0, remain_in_line-nr_after_shift );
 					}
 					break;
+				case 'X': //Erase # of characters on current line.
+					if( cs0 < 1 ) cs0 = 1;
+					if( cs0 > cx-ts->curx ) cs0 = cx-ts->curx;
+					BufferSet( ts, ts->cury*cx + ts->curx, 0, cs0 );
+					break;					
 				case 'r': //DECSTBM
-					ts->scroll_top = ts->csistate[0]-1;
-					ts->scroll_bottom = ts->csistate[1]-1;
+					ts->scroll_top = cs0-1;
+					ts->scroll_bottom = cs1-1;
 					ts->curx = 0;
 					ts->cury = ts->scroll_top;
 					UpdateTopBottom( ts );
 					break;
 				case 'm':
 				{
-					//SGR (set attributes)
 					int i;
+					//SGR (set attributes)
 					for( i = 0; i < ts->whichcsi+1; i++ )
 					{
 						int k = ts->csistate[i];
@@ -429,7 +440,7 @@ void EmitChar( struct TermStructure * ts, int crx )
 				}
 				default:
 #ifdef DEBUG_VLINTERM
-					fprintf( stderr, "UNHANDLED CSI Esape: %c [%d]\n", crx, ts->csistate[0] );
+					fprintf( stderr, "UNHANDLED CSI Esape: %c [%d]\n", crx, cs0 );
 #endif
 					break;
 				}
@@ -463,30 +474,21 @@ void EmitChar( struct TermStructure * ts, int crx )
 		if( ts->cury < top ) ts->cury = top;
 		if( ts->curx < 0 ) ts->curx = 0;
 		if( ts->cury >= bottom ) ts->cury = bottom-1;
-		if( ts->curx >= ts->charx ) ts->curx = ts->charx-1; //XXX DUBIOUS
+		if( ts->curx >= cx ) ts->curx = cx-1; //XXX DUBIOUS
 	}
 	else
 	{
 		//No escape sequence.  Just handle the character.
-
-		/*if( ts->dec_private_mode & 2 ) //??? XXX Is this correct? 
-		{
-			if( ts->curx >= ts->charx ) { ts->curx = 0; ts->cury++; if( ts->cury >= ts->chary ) ts->cury = ts->chary-1; } 
-			BufferSet( ts, ts->curx+ts->cury*ts->charx, crx, 1 );
-			ts->curx++;
-		}
-		else
-		{*/
-			if( ts->curx >= ts->charx ) { ts->curx = 0; ts->cury++; HandleNewline( ts, 0 ); }
-			BufferSet( ts, ts->curx+ts->cury*ts->charx, crx, 1 );
-			ts->curx++;
-		//}
+		//XXX TODO: Handle insert mode (DEC mode 4h)
+		if( ts->curx >= cx ) { ts->curx = 0; ts->cury++; HandleNewline( ts, 0 ); }
+		BufferSet( ts, ts->curx+ts->cury*cx, crx, 1 );
+		ts->curx++;
 #ifdef DEBUG_VLINTERM
 		if( crx < 32 || crx < 0 ) fprintf( stderr, "C-X %d\n", (uint8_t)crx );
 #endif
 	}
-
 	goto end;
+
 linefeed:
 	ts->curx = 0;
 	HandleNewline( ts, 0 );
@@ -513,27 +515,37 @@ end:
 	OGUnlockMutex( ts->screen_mutex );
 }
 
+void TermScroll( struct TermStructure * ts, int amount )
+{
+	int sb = ts->scrollback + amount;
+	if( sb < 0 ) sb = 0;
+	if( sb >= ts->historyy-ts->chary ) sb = ts->historyy-ts->chary-1;;
+	ts->scrollback = sb;
+}
 
 void ResizeScreen( struct TermStructure * ts, int neww, int newh )
 {
-	if( (ts->termbuffer && newh == ts->chary && neww == ts->charx ) || neww < 1 || newh < 1 ) return;
+	if( neww < 1 || newh < 1 ) return;
 	OGLockMutex( ts->screen_mutex );
-	uint32_t * oldbuffer = ts->termbuffer;
-	ts->termbuffer = calloc( neww, newh * 4 );
+	uint32_t * oldbuffer = ts->termbuffer_raw;
+
+	uint32_t * newbuffer = ts->termbuffer_raw = calloc( neww, ts->historyy * 4 );
+	uint32_t * newtbuff = ts->termbuffer = newbuffer + (ts->historyy-newh)*neww;
+
 	if( oldbuffer )
 	{
 		int line;
 		int mx = (neww<ts->charx)?neww:ts->charx;
 		int ml = (newh<ts->chary)?newh:ts->chary;
 		int ch;
-		for( line = 0; line < newh; line++ )
+		for( line = 0; line < ts->historyy; line++ )
 		{
 			for( ch = 0; ch < neww; ch++ )
 			{
 				uint32_t och = 1<<24;
 				if( line < ts->chary && ch < ts->charx )
-					och = oldbuffer[line * ts->charx + ch];
-				ts->termbuffer[line*neww+ch] = och | 1<<24;
+					och = oldbuffer[line*ts->charx + ch];
+				newbuffer[line*neww+ch] = och | 1<<24;
 			}
 		}
 		free( oldbuffer );
@@ -548,6 +560,7 @@ void ResizeScreen( struct TermStructure * ts, int neww, int newh )
 		tsize.ws_ypixel = newh;
 		ioctl(ts->ptspipe, TIOCSWINSZ, &tsize);
 	}
+	ts->cury += newh-ts->chary;
 	ts->charx = neww;
 	ts->chary = newh;
 
@@ -556,3 +569,52 @@ void ResizeScreen( struct TermStructure * ts, int neww, int newh )
 
 	OGUnlockMutex( ts->screen_mutex );
 }
+
+int spawn_process_with_pts( const char * execparam, char * const argv[], int * pid )
+{
+	int r = getpt();
+	if( r <= 0 ) return -1;
+	if( grantpt(r) ) return -2;
+	if( unlockpt( r ) ) return -3;
+	char slavepath[64];
+	if(ptsname_r(r, slavepath, sizeof(slavepath)) < 0)
+	{
+		return -4;
+	}
+
+	int rforkv = fork();
+	if (rforkv == 0)
+	{
+		close( r ); //Close master
+		close( 0 );
+		close( 1 );
+		close( 2 );
+		r = open( slavepath, O_RDWR | O_NOCTTY ); //Why did the previous example have the O_NOCTTY flag?
+		//if (ioctl(r, TIOCSCTTY, NULL) < 0)
+		//	fprintf(stderr, "ioctl TIOCSCTTY failed: %s\n", strerror(errno));
+		dup2( r, 0 );
+		dup2( r, 1 );
+		dup2( r, 2 );
+		setsid();
+
+		//From ST
+		{
+			setenv("TERM", "xterm", 1);
+		}
+		execvp( execparam, argv );
+	}
+	else
+	{
+		//https://stackoverflow.com/questions/13849582/sending-signal-to-a-forked-process-that-calls-exec
+		//setpgid(rforkv, 0);   //Why is this mutually exclusive with setsid()?
+		if( rforkv < 0 )
+		{
+			close( r );
+			return -10;
+		}
+		*pid = rforkv;
+		return r;
+	}
+}
+
+
