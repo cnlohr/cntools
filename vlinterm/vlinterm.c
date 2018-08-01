@@ -535,15 +535,14 @@ void ResizeScreen( struct TermStructure * ts, int neww, int newh )
 	if( oldbuffer )
 	{
 		int line;
-		int mx = (neww<ts->charx)?neww:ts->charx;
-		int ml = (newh<ts->chary)?newh:ts->chary;
 		int ch;
+		printf( "RESIZE %d %d %d\n", ts->historyy, ts->charx, neww );
 		for( line = 0; line < ts->historyy; line++ )
 		{
 			for( ch = 0; ch < neww; ch++ )
 			{
-				uint32_t och = 1<<24;
-				if( line < ts->chary && ch < ts->charx )
+				uint32_t och = 1<<24; //1<<24 is the 'taint' flag
+				if( ch < ts->charx )
 					och = oldbuffer[line*ts->charx + ch];
 				newbuffer[line*neww+ch] = och | 1<<24;
 			}

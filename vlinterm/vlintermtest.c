@@ -306,14 +306,16 @@ int main()
 
 	usleep(10000);
 
-	int last_scrollback;
+	int last_scrollback = 0;
 	int last_curx = 0, last_cury = 0;
 	while(1)
 	{
-		int x, y;
-		CNFGHandleInput();
 		short screenx, screeny;
 		CNFGGetDimensions( &screenx, &screeny );
+		int x, y;
+//		printf( "+\n" );
+		CNFGHandleInput();
+//		printf( "-\n" );
 		int newx = screenx/font_w;
 		int newy = screeny/font_h;
 
