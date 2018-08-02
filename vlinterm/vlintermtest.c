@@ -14,7 +14,7 @@ int spawn_process_with_pts( const char * execparam, char * const argv[], int * p
 
 #define INIT_CHARX  80
 #define INIT_CHARY  25
-#define CHAR_DOUBLE 0   //Set to 1 to double size, or 0 for normal size.
+#define CHAR_DOUBLE 0  //Set to 1 to double size, or 0 for normal size.
 
 int charset_w, charset_h, font_w, font_h;
 uint32_t * font;
@@ -79,10 +79,12 @@ void * rxthread( void * v )
 	return 0;
 }
 
+char NewWindowTitle[1024];
+int UpdateWindowTitle = 0;
 
 void HandleOSCCommand( struct TermStructure * ts, int parameter, const char * value )
 {
-	if( parameter == 0 ) CNFGChangeWindowTitle( value );
+	if( parameter == 0 ) UpdateWindowTitle = snprintf( NewWindowTitle, 1023, "%s", value );
 	else
 		printf( "OSC Command: %d: %s\n", parameter, value );
 }
@@ -200,12 +202,7 @@ void HandleKey( int keycode, int bDown )
 				}
 				else if( ctrl_held )
 				{
-					if( keycode == 'c' )
-					{
-						kill( tcgetpgrp(ts.ptspipe), SIGINT );
-						return;
-					}
-					else if( keycode >= 'a' && keycode <= 'z' )
+					if( keycode >= 'a' && keycode <= 'z' )
 					{
 						keycode = keycode - 'a' + 1;
 					}
@@ -231,7 +228,7 @@ void HandleKey( int keycode, int bDown )
 
 void HandleButton( int x, int y, int button, int bDown )
 {
-	if( button == 5 || button == 4 && bDown )
+	if( (button == 5 || button == 4) && bDown )
 	{
 		if( ts.dec_private_mode & (1<<29) )
 		{
@@ -247,7 +244,7 @@ void HandleButton( int x, int y, int button, int bDown )
 	{
 		x /= font_w;
 		y /= font_h;
-		char cc[6] = { '\x1b', '[', 'M', (bDown?0x20:0x23), x+0x21, y+0x21 };
+		char cc[6] = { '\x1b', '[', 'M', (bDown?0x20:0x23)+button-1, x+0x21, y+0x21 };
 		FeedbackTerminal( &ts, cc, 6 );
 	}
 }
@@ -285,6 +282,7 @@ uint32_t TermColor( uint32_t incolor, int color, int attrib )
 
 int main()
 {
+	uint32_t * framebuffer = 0;	
 	if( LoadFont("ibm437.pgm") ) return -1;
 
 	ts.screen_mutex = OGCreateMutex();
@@ -292,19 +290,18 @@ int main()
 	ts.chary = INIT_CHARY;
 	ts.echo = 0;
 	ts.historyy = 1000;
+	ts.termbuffer = 0;
+
 	short w = ts.charx * font_w * (CHAR_DOUBLE+1);
 	short h = ts.chary * font_h * (CHAR_DOUBLE+1);
-	CNFGSetup( "Test terminal", w, h );
+	CNFGSetup( "vlinterm", w, h );
 
-	uint32_t * framebuffer = malloc( ts.charx * ts.chary * font_w * font_h * 4 *(CHAR_DOUBLE+1)*(CHAR_DOUBLE+1));
-	ts.termbuffer = 0;
+	//uint32_t * framebuffer = malloc( ts.charx * ts.chary * font_w * font_h * 4 *(CHAR_DOUBLE+1)*(CHAR_DOUBLE+1));
 	ResetTerminal( &ts );
 	char * localargv[] = { "/bin/bash", 0 };
 	ts.ptspipe = spawn_process_with_pts( "/bin/bash", localargv, &ts.pid );
 	ResizeScreen( &ts, ts.charx, ts.chary );
 	OGCreateThread( rxthread, (void*)&ts );
-
-	usleep(10000);
 
 	int last_scrollback = 0;
 	int last_curx = 0, last_cury = 0;
@@ -313,20 +310,27 @@ int main()
 		short screenx, screeny;
 		CNFGGetDimensions( &screenx, &screeny );
 		int x, y;
-//		printf( "+\n" );
 		CNFGHandleInput();
-//		printf( "-\n" );
-		int newx = screenx/font_w;
-		int newy = screeny/font_h;
+		int newx = screenx/font_w/(CHAR_DOUBLE+1);
+		int newy = screeny/font_h/(CHAR_DOUBLE+1);
 
-		if( (newx != ts.charx || newy != ts.chary) && newy > 0 && newx > 0 )
+		if( ((newx != ts.charx || newy != ts.chary) && newy > 0 && newx > 0) || !framebuffer )
 		{
 			ResizeScreen( &ts, newx, newy );
 			w = ts.charx * font_w * (CHAR_DOUBLE+1);
 			h = ts.chary * font_h * (CHAR_DOUBLE+1);
 			framebuffer = realloc( framebuffer, w*h*4 );
+			memset( framebuffer, 0, w*h*4 );
 			if( last_cury >= ts.chary ) last_cury = ts.chary-1;
 		}
+
+
+		if(UpdateWindowTitle)
+		{
+			CNFGChangeWindowTitle( NewWindowTitle );
+			UpdateWindowTitle = 0;
+		}
+
 
 		int scrollback = ts.scrollback;
 		if( scrollback >= ts.historyy-ts.chary ) scrollback = ts.historyy-ts.chary-1;

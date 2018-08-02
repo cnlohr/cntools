@@ -224,7 +224,7 @@ void EmitChar( struct TermStructure * ts, int crx )
 				//case '(': ts->escapestate = 5; break;
 				default: 
 #ifdef DEBUG_VLINTERM
-					fprintf( stderr, "UNHANDLED Esape: %c %d\n", crx, ts->whichcsi, ts->csistate[0] );
+					fprintf( stderr, "UNHANDLED Esape: %c %d [%d]\n", crx, ts->whichcsi, ts->csistate[0] );
 #endif
 					break;
 			}
@@ -536,7 +536,6 @@ void ResizeScreen( struct TermStructure * ts, int neww, int newh )
 	{
 		int line;
 		int ch;
-		printf( "RESIZE %d %d %d\n", ts->historyy, ts->charx, neww );
 		for( line = 0; line < ts->historyy; line++ )
 		{
 			for( ch = 0; ch < neww; ch++ )
@@ -595,11 +594,7 @@ int spawn_process_with_pts( const char * execparam, char * const argv[], int * p
 		dup2( r, 1 );
 		dup2( r, 2 );
 		setsid();
-
-		//From ST
-		{
-			setenv("TERM", "xterm", 1);
-		}
+		setenv("TERM", "xterm", 1);
 		execvp( execparam, argv );
 	}
 	else
