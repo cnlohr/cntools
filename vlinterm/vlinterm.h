@@ -54,6 +54,8 @@ struct TermStructure
 	og_mutex_t screen_mutex;
 	uint8_t tainted;
 
+	void * user;
+
 };
 
 void EmitChar( struct TermStructure * ts, int crx );
