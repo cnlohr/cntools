@@ -12,6 +12,8 @@ struct TermStructure
 {
 	int ptspipe;
 
+	uint8_t * linetaint;	//One for each line, indicating that particular line is tainted.
+
 	uint32_t * termbuffer;
 	uint32_t * termbuffer_raw;
 	// text  <<lsB
@@ -63,6 +65,7 @@ void ResetTerminal( struct TermStructure * ts );
 int FeedbackTerminal( struct TermStructure * ts, const uint8_t * data, int len );
 void ResizeScreen( struct TermStructure * ts, int neww, int newh );
 void TermScroll( struct TermStructure * ts, int amount );
+void DestroyTerminal( struct TermStructure * ts );
 
 //Use this in conjunction with setting the terminal pid setting.
 int spawn_process_with_pts( const char * execparam, char * const argv[], int * pid );

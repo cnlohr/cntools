@@ -269,7 +269,7 @@ uint32_t TermColor( uint32_t incolor, int color, int attrib )
 	}
 
 	int base_color = (attrib & 1)?0xff:0xaf;
-	if( attrib & 1 ) base_color = 0xff;
+	if( attrib & 1 ) base_color = 0xff; //??? This looks wrong?
 
 	uint32_t outcolor = 0;// = incolor
 	if( actc & 4 ) outcolor |= base_color;

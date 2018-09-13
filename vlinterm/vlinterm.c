@@ -24,6 +24,14 @@ static void BufferSet( struct TermStructure * ts, int start, int value, int leng
 	{
 		ts->termbuffer[i] = v;
 	}
+
+	start /= cx;
+	length = (length-1) / cx;
+	for( i = start; i <= length; i++ )
+	{
+		ts->linetaint[i] = 1;
+	}
+
 	ts->tainted = 1;
 }
 
@@ -80,6 +88,13 @@ static void BufferCopy( struct TermStructure * ts, int dest, int src, int length
 	}
 	int i;
 	for( i = 0; i < length; i++ ) ts->termbuffer[i+dest] |= (1<<24);
+
+	//Yugh... this is dirty, probably should rewrite these last few lines.
+	length = (length-1) / cx;
+	dest /= cx;
+	for( i = 0; i <= length && (i+dest) < cy; i++ ) if( i+dest >= 0 ) ts->linetaint[i+dest] = 1;
+
+
 	ts->tainted = 1;
 }
 
@@ -527,14 +542,15 @@ void ResizeScreen( struct TermStructure * ts, int neww, int newh )
 {
 	if( neww < 1 || newh < 1 ) return;
 	OGLockMutex( ts->screen_mutex );
+	int line;
 	uint32_t * oldbuffer = ts->termbuffer_raw;
 
+	uint8_t  * linetaint = ts->linetaint = calloc( ts->historyy, 1 );
 	uint32_t * newbuffer = ts->termbuffer_raw = calloc( neww, ts->historyy * 4 );
 	uint32_t * newtbuff = ts->termbuffer = newbuffer + (ts->historyy-newh)*neww;
 
 	if( oldbuffer )
 	{
-		int line;
 		int ch;
 		for( line = 0; line < ts->historyy; line++ )
 		{
@@ -547,6 +563,11 @@ void ResizeScreen( struct TermStructure * ts, int neww, int newh )
 			}
 		}
 		free( oldbuffer );
+	}
+
+	for( line = 0; line < ts->historyy; line++ )
+	{
+		linetaint[line] = 1;
 	}
 
 	if( ts->ptspipe )
@@ -611,4 +632,11 @@ int spawn_process_with_pts( const char * execparam, char * const argv[], int * p
 	}
 }
 
+
+void DestroyTerminal( struct TermStructure * ts )
+{
+	free( ts->termbuffer_raw );
+	free( ts->linetaint );
+	OGDeleteMutex( ts->screen_mutex );
+}
 
