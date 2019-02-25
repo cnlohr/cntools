@@ -242,9 +242,10 @@ int TickHTTP()
 			{
 				closesocket( tsocket );
 			}
-
-			sockets[r] = tsocket;
-
+			else
+			{
+				sockets[r] = tsocket;
+			}
 		}
 		for( i = 1; i < pollct; i++)
 		{
