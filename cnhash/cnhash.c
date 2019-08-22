@@ -195,7 +195,7 @@ uint32_t cnhash_strhf( void * key, void * opaque )
 	char * str = (char*)key;
 	unsigned long hash = 0;
 	int c;
-	while (c = *str++)
+	while ( (c = *str++ ) )
 		hash = c + (hash << 6) + (hash << 16) - hash;
 	if( !hash )
 		return 1;
