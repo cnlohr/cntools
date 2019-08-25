@@ -69,7 +69,7 @@ int CNHashInsert( cnhashtable * ht, void * key, void * data )
 		{
 			if( ht->elements[i].hashvalue == hash )
 			{
-				if( ht->cf( he->key, key, ht->opaque ) == 0 ) break;
+				if( ht->cf( he->key, key, ht->opaque ) == 0 ) return 1;
 			}
 			i = (i+1) % ht->array_size;
 		}
@@ -157,20 +157,42 @@ void ** CNHashGetValueMultiple( cnhashtable * ht, void * key, int * nrvalues )
 
 void CNHashDelete( cnhashtable * ht, void * key )
 {
-	int nrvalues;
-	cnhashelement * hes = CNHashGetMultiple( ht, key, &nrvalues );
+	int as = ht->array_size;
 	int i;
 	uint32_t hash = ht->hf( key, ht->opaque );
-
-	for( i = 0; i < ht->array_size; i++ )
+	for( i = 0; i < as; i++ )
 	{
-		cnhashelement * he = &ht->elements[i];
-		if( he->hashvalue == hash )
+		cnhashelement * he = &ht->elements[(hash + i)%as];
+
+		//If we encounter a null, we can know all is right in the world.
+		if( he->hashvalue == 0 ) break;
+
+		if( ht->cf( key, he->key, ht->opaque ) == 0 )
 		{
-			ht->df( he->key, he->data, ht->opaque );
+			if( ht->df ) ht->df( he->key, he->data, ht->opaque );
 			he->key = 0;
 			he->data = 0;
 			he->hashvalue = 0;
+			ht->nr_elements--;
+		}
+		else
+		{
+			//We have a non-matching element, we must remove and reinsert it.
+			cnhashelement tmp;
+			memcpy( &tmp, he, sizeof( tmp ) );
+			he->key = 0;
+			he->data = 0;
+			he->hashvalue = 0;
+			uint32_t hash = tmp.hashvalue;
+			int j = hash % ht->array_size;
+			cnhashelement * he;
+			while( ( he = &ht->elements[j] )->hashvalue )
+			{
+				j = (j+1) % as;
+			}
+			he->key = tmp.key;
+			he->hashvalue = tmp.hashvalue;
+			he->data = tmp.data;
 		}
 	}
 }
@@ -181,13 +203,21 @@ void CNHashDestroy( cnhashtable * ht )
 	for( i = 0; i < ht->array_size; i++ )
 	{
 		cnhashelement * he = &ht->elements[i];
-		if( he->hashvalue )
+		if( he->hashvalue && ht->df )
 			ht->df( he->key, he->data, ht->opaque );
 	}
 	free( ht->elements );
 	free( ht );
 }
 
+cnhashelement * CNHashIndex( cnhashtable * ht, void * key )
+{
+	//If get fails, insert
+	cnhashelement * ret = CNHashGet( ht, key );
+	if( ret ) return ret;
+	CNHashInsert( ht, key, 0 );
+	return CNHashGet( ht, key );
+}
 
 uint32_t cnhash_strhf( void * key, void * opaque )
 {
@@ -214,6 +244,21 @@ void     cnhash_strdel( void * key, void * data, void * opaque )
 }
 
 
+
+
+
+#ifndef HASHNODEBUG
+#include <stdio.h>
+void CNHashDump( cnhashtable * ht )
+{
+	int i;
+	for( i = 0; i < ht->array_size; i++ )
+	{
+		cnhashelement * e = &ht->elements[i];
+		printf( "%d: %p %d %p\n", i, e->key, e->hashvalue, e->data );
+	}
+}
+#endif
 
 
 

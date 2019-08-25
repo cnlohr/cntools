@@ -4,6 +4,8 @@
 
 #include <stdint.h>
 
+//This hast table is *not* threadsafe!
+
 typedef struct cnhashelement_t
 {
 	void *   key;
@@ -29,14 +31,18 @@ typedef struct cnhashtable_t
 } cnhashtable;
 
 cnhashtable * CNHashGenerate( int allow_duplicates, void * opaque, cnhash_hash_function hf, cnhash_compare_function cf, cnhash_delete_function df );
-int CNHashInsert( cnhashtable * ht, void * key, void * data );
+int CNHashInsert( cnhashtable * ht, void * key, void * data ); //return 0 if successful.
 cnhashelement * CNHashGet( cnhashtable * ht, void * key );
 cnhashelement * CNHashGetMultiple( cnhashtable * ht, void * key, int * nrvalues );
+cnhashelement * CNHashIndex( cnhashtable * ht, void * key ); //If get fails, insert
 void * CNHashGetValue( cnhashtable * ht, void * key );
 void ** CNHashGetValueMultiple( cnhashtable * ht, void * key, int * nrvalues );
 void CNHashDelete( cnhashtable * ht, void * key );
 void CNHashDestroy( cnhashtable * ht );
 
+#ifndef HASHNODEBUG
+void CNHashDump( cnhashtable * ht );
+#endif
 
 //String-version assumes both key and data are malloc'd ptrs that will be freed.
 uint32_t cnhash_strhf( void * key, void * opaque );
