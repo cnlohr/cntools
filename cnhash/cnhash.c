@@ -30,13 +30,13 @@ cnhashtable * CNHashGenerate( int allow_duplicates, void * opaque, cnhash_hash_f
 	return ret;
 }
 
-int CNHashInsert( cnhashtable * ht, void * key, void * data )
+cnhashelement * CNHashInsert( cnhashtable * ht, void * key, void * data )
 {
 	if( ( ht->nr_elements + 1 ) > ( ht->array_size / 2 ) )
 	{
 		//HT too small.  Increase size.
 		if( (ht->table_size_index + 1) >= sizeof( cnhashtablesizes ) / sizeof( cnhashtablesizes[0] ) )
-			return -1;
+			return 0;
 
 		int old_array_size = ht->array_size;
 		cnhashelement * old_array = ht->elements;
@@ -69,7 +69,7 @@ int CNHashInsert( cnhashtable * ht, void * key, void * data )
 		{
 			if( ht->elements[i].hashvalue == hash )
 			{
-				if( ht->cf( he->key, key, ht->opaque ) == 0 ) return 1;
+				if( ht->cf( he->key, key, ht->opaque ) == 0 ) return he;
 			}
 			i = (i+1) % ht->array_size;
 		}
@@ -79,7 +79,7 @@ int CNHashInsert( cnhashtable * ht, void * key, void * data )
 	he->data = data;
 
 	ht->nr_elements++;
-	return 0;
+	return he;
 }
 
 cnhashelement * CNHashGet( cnhashtable * ht, void * key )
@@ -215,15 +215,14 @@ cnhashelement * CNHashIndex( cnhashtable * ht, void * key )
 	//If get fails, insert
 	cnhashelement * ret = CNHashGet( ht, key );
 	if( ret ) return ret;
-	CNHashInsert( ht, key, 0 );
-	return CNHashGet( ht, key );
+	return CNHashInsert( ht, key, 0 );
 }
 
-uint32_t cnhash_strhf( void * key, void * opaque )
+intptr_t cnhash_strhf( void * key, void * opaque )
 {
 	//SDBM (public domain) http://www.cse.yorku.ca/~oz/hash.html
 	char * str = (char*)key;
-	unsigned long hash = 0;
+	intptr_t hash = 0;
 	int c;
 	while ( (c = *str++ ) )
 		hash = c + (hash << 6) + (hash << 16) - hash;
@@ -244,6 +243,23 @@ void     cnhash_strdel( void * key, void * data, void * opaque )
 }
 
 
+intptr_t cnhash_ptrhf( void * key, void * opaque )
+{
+	if( key == 0 )
+		return 1;
+	else
+		return (intptr_t)key;
+}
+
+int      cnhash_ptrcf( void * key_a, void * key_b, void * opaque )
+{
+	return key_a != key_b;
+}
+
+void     cnhash_ptrdel( void * key, void * data, void * opaque )
+{
+	//No op.
+}
 
 
 
@@ -255,7 +271,7 @@ void CNHashDump( cnhashtable * ht )
 	for( i = 0; i < ht->array_size; i++ )
 	{
 		cnhashelement * e = &ht->elements[i];
-		printf( "%d: %p %d %p\n", i, e->key, e->hashvalue, e->data );
+		printf( "%d: %p %ld %p\n", i, e->key, e->hashvalue, e->data );
 	}
 }
 #endif
