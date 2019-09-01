@@ -7,16 +7,28 @@
 
 CNRBTREETEMPLATE( , int, int, intcomp, intcopy, intdelete, , , , );
 
-void PrintTree( cnrbtree_intint_node * t, int depth )
+int PrintTree( cnrbtree_intint_node * t, int depth )
 {
 	if( !t )
 	{
 		printf( "%*s-\n", depth*4, "" );
-		return;
+		return 1;
 	}
 	printf( "%*s%d %d (%p) PARENT: %p\n", depth*4, "", t->key, t->color, t, t->parent );
-	PrintTree( t->left, depth+1 );
-	PrintTree( t->right, depth+1 );
+	int d1 = PrintTree( t->left, depth+1 );
+	int d2 = PrintTree( t->right, depth+1 );
+	if( d1 != d2 )
+	{
+		fprintf( stderr, "Black Fault (%d != %d)\n", d1, d2 );
+		exit(1);
+	}
+	return d1 + (t->color == CNRBTREE_COLOR_BLACK);
+	/*
+		Every node is either red or black.
+		Every leaf (NULL) is black.
+		If a node is red, then both its children are black.
+		Every simple path from a node to a descendant leaf contains the same number of black nodes. 
+	*/
 }
 
 int main()
@@ -52,16 +64,19 @@ int main()
 	PrintTree( tree->node, 0 );
 #endif
 
+#if 1
 	int addlist[100];
 	int i;
-	for( i = 0; i < 100; i++ )
+	for( i = 0; i < 10; i++ )
 	{
 		PrintTree( tree->node, 0 );
 		printf( "Adding: %d\n", (addlist[i] = rand()) );
 		cnrbtreeintintaccess( tree, addlist[i] )->data = 80;
 	}
 
-	for( i = 0; i < 100; i++ )
+		PrintTree( tree->node, 0 );
+
+	for( i = 0; i < 10; i++ )
 	{
 		int k = addlist[i];
 		printf( "Deleting %d (%d)\n", k, i );
@@ -69,8 +84,9 @@ int main()
 		printf( "Deleted %d\n", k );
 		PrintTree( tree->node, 0 );
 	}
+#endif
 
-/*
+
 	cnrbtreeintintaccess( tree, 50 )->data = 80;
 	cnrbtreeintintaccess( tree, 60 )->data = 80;
 	cnrbtreeintintaccess( tree, 70 )->data = 80;
@@ -106,7 +122,6 @@ int main()
 	cnrbtreeintintdelete( tree, 70 );
 	printf( "Deleted 60\n" );
 	PrintTree( tree->node, 0 );
-*/
 
 #if 0
 	cnrbtreeintintdelete( tree, 60 );
