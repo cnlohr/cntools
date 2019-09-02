@@ -1,8 +1,76 @@
+/* cnrbtree.h - v0.1 - public domain C templated Red-Black Tree -
+       https://github.com/cnlohr/cntools/cnrbtree
+       no warranty implied; use at your own risk
+
+   Do this:
+
+     #define CNRBTREE_IMPLEMENTATION
+
+   before you include this file in *one* C or C++ file to create the instance
+   I.e. it should look something like this:
+
+     #include <...>
+     #include <...>
+     #define CNRBTREE_IMPLEMENTATION
+     #include "cnrbtree.h"
+
+  Alternatively, if you are using a compile that supports the __weak__
+  attribute you may just set CNRBTREE_GENERIC_DECORATOR and
+  CNRBTREE_TEMPLATE_DECORATOR to __attribute__((weak))
+
+  Usage: Somewhere in your program, before using a type, define the template:
+
+     typedef struct object_t
+     {
+       int myvalue;
+     } object;
+     typedef char * str;
+     CNRBTREETEMPLATE( str, int, RBstrcmp, RBstrcpy, RBstrdel );
+
+  This will define a tree which uses strings to index.  You can then create
+  these types.  I.e.
+
+     //Constructs the tree
+     cnrbtree_strint * tree = cnrbtree_strint_create();
+
+     //Accesses, like C++ map's [] operator.
+     RBA( tree, "a" ).myvalue = 5;
+     RBA( tree, "d" ).myvalue = 8;
+     RBA( tree, "c" ).myvalue = 7;
+     RBA( tree, "b" ).myvalue = 6;
+
+     //Access, like [] but reading.
+     printf( "%d\n", RBA(tree, "c").myvalue );
+
+     //Iterate through them all.
+     RBFOREACH( str_payload, tree, i )
+     {
+         printf( ".key = %s .myvalue = %d\n", i->key, i-data.myvalue );
+     }
+
+     //Typesafe delete.
+     RBDESTROY( tree );
+
+  Authors:
+    <>< Charles Lohr
+ 
+  Based on Wikipedia article on red black trees.
+
+  For judistictions where a public domain license is not available, the code
+       may be licensed under:
+   * New BSD (3-Clause) License
+   * CC0 License
+   * MIT/x11 License
+
+  Version History:
+     0.1 - Initial Release (Incomplete and relatively slow)
+*/
+
 #ifndef _CNRBTREE_H
 #define _CNRBTREE_H
 
-
 //XXX TODO: Consider optimizations and pulling even more things out of the templated code into the regular code.
+
 
 #if !defined( CNRBTREE_MALLOC ) || !defined( CNRBTREE_FREE )
 #include <stdlib.h>
@@ -35,6 +103,15 @@
 #endif
 
 
+//Shorthand for red-black access, and typesafe deletion.
+#ifndef NO_RBA
+#define RBA(x,y) (x->access)( x, y )->data
+#define RBDESTROY(x) (x->destroy)( x )
+#define RBFOREACH( type, tree, i ) for( cnrbtree_##type##_node * i = tree->begin; i; i = (cnrbtree_##type##_node *)cnrbtree_generic_next( (cnrbtree_generic_node *)i ) )
+#endif
+
+
+
 struct cnrbtree_generic_node_t;
 typedef struct cnrbtree_generic_node_t
 {
@@ -58,15 +135,6 @@ typedef struct cnrbtree_generic_t
 #define CNRBTREE_COLOR_NONE  0
 #define CNRBTREE_COLOR_RED   1
 #define CNRBTREE_COLOR_BLACK 2
-
-
-//Shorthand for red-black access, and typesafe deletion.
-#ifndef NO_RBA
-#define RBA(x,y) (x->access)( x, y )->data
-#define RBDESTROY(x) (x->destroy)( x )
-#define RBFOREACH( type, tree, i ) for( cnrbtree_##type##_node * i = tree->begin; i; i = (cnrbtree_##type##_node *)cnrbtree_generic_next( (cnrbtree_generic_node *)i ) )
-
-#endif
 
 
 
