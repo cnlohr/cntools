@@ -1,4 +1,4 @@
-/* cnrbtree.h - v0.1 - public domain C templated Red-Black Tree -
+/* cnrbtree.h - v0.1pre - public domain C templated Red-Black Tree -
        https://github.com/cnlohr/cntools/cnrbtree
        no warranty implied; use at your own risk
 
@@ -17,6 +17,23 @@
   Alternatively, if you are using a compile that supports the __weak__
   attribute you may just set CNRBTREE_GENERIC_DECORATOR and
   CNRBTREE_TEMPLATE_DECORATOR to __attribute__((weak))
+
+  This is templated red-black tree for C.  It can be used for storing things
+  like dictionaries, iterating through automatically sorting lists, finding
+  elements in a dictionary that are equal to or greater than, or other similar
+  unusual operations.
+
+  Because this is templated, which means that for every combination of types,
+  you can create the template which builds the functions  and types customized
+  for your specific type.  This allows for a number of rather positive
+  features:
+    * The payload lives inside the nodes which are holding it.
+      * Less malloc/free
+      * Better cache coherency.
+    * Avoid function calls for comparisons (great for primitive types).
+    * Syntax for using the general accessor is very nice as it is automatically
+      typed for your specific types.
+    * Allows the compiler to apply extra optimization to your specific type.
 
   Usage: Somewhere in your program, before using a type, define the template:
 
@@ -43,7 +60,7 @@
      printf( "%d\n", RBA(tree, "c").myvalue );
 
      //Iterate through them all.
-     RBFOREACH( str_payload, tree, i )
+     RBF+-OREACH( str_payload, tree, i )
      {
          printf( ".key = %s .myvalue = %d\n", i->key, i-data.myvalue );
      }
@@ -63,7 +80,7 @@
    * MIT/x11 License
 
   Version History:
-     0.1 - Initial Release (Incomplete and relatively slow)
+     0.1pre - Initial Release (Incomplete and relatively slow)
 */
 
 #ifndef _CNRBTREE_H
