@@ -1,10 +1,8 @@
 #ifndef _CNRBTREE_H
 #define _CNRBTREE_H
 
-//
-//
-// XXX TODO: Help streamline insertion and deletion process
-// XXX TODO: Update iterators real-time.
+
+//XXX TODO: Consider optimizations and pulling even more things out of the templated code into the regular code.
 
 #if !defined( CNRBTREE_MALLOC ) || !defined( CNRBTREE_FREE )
 #include <stdlib.h>
@@ -55,8 +53,7 @@ typedef struct cnrbtree_generic_t
 #ifndef NO_RBA
 #define RBA(x,y) (x->access)( x, y )->data
 #define RBDESTROY(x) (x->destroy)( x )
-#define FOREACH_IN_TREE_TYPE( type, tree, i ) \
-	for( cnrbtree_##type##_node * i = tree->begin; i; i = (cnrbtree_##type##_node *)cnrbtree_generic_next( (cnrbtree_generic_node *)i ) )
+#define RBFOREACH( type, tree, i ) for( cnrbtree_##type##_node * i = tree->begin; i; i = (cnrbtree_##type##_node *)cnrbtree_generic_next( (cnrbtree_generic_node *)i ) )
 
 #endif
 
@@ -66,8 +63,6 @@ typedef struct cnrbtree_generic_t
 CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletebase( cnrbtree_generic_node * n, cnrbtree_generic * t );
 CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_insert_repair_tree_with_fixup_primary( cnrbtree_generic_node * tmp, cnrbtree_generic * tree, int cmp, int sizetoalloc );
 CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_next( cnrbtree_generic_node * node );
-
-
 
 
 
@@ -205,7 +200,8 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_insert_repair_tree( cnrbtree_ge
 			}
 
 			p->color = CNRBTREE_COLOR_BLACK;
-			if( g ) g->color = CNRBTREE_COLOR_RED; //XXX Why do we need to check?  Is this correct?
+			//if( g ) //Check probably not needed.
+			g->color = CNRBTREE_COLOR_RED;
 		}
 	}
 }
@@ -259,20 +255,20 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_exchange_nodes_internal( cnrbtr
 
 	{
 		cnrbtree_generic_node tempexchange;
+		tempexchange.parent = n->parent;
 		tempexchange.left = n->left;
 		tempexchange.right = n->right;
 		tempexchange.color = n->color;
-		tempexchange.parent = n->parent;
 
-		n->color = n1->color;
 		n->parent = n1->parent;
 		n->left = n1->left;
 		n->right = n1->right;
+		n->color = n1->color;
 
-		n1->color = tempexchange.color;
 		n1->parent = tempexchange.parent;
 		n1->left = tempexchange.left;
 		n1->right = tempexchange.right;
+		n1->color = tempexchange.color;
 	}
 
 	if( n1->parent == n1 ) n1->parent = n;
@@ -349,8 +345,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletecase1( cnrbtree_generic_n
 		s = (p->left == n)?p->right:p->left; //But the sibling updates.
 	}
 
-
-	//Tricky! We can't have S be void.
+	//We can't have S be void, so we substitute in a temporary sibling.
 	if( !s )
 	{
 
@@ -373,18 +368,20 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletecase1( cnrbtree_generic_n
 	else
 	{
 		//DeleteCase4(n);
-		if ( ( s != &temp_sibling ) /* !!?@?@!? XXX Do we want this test?!? */ && (p->color == CNRBTREE_COLOR_RED) && (s->color == CNRBTREE_COLOR_BLACK) &&
+		if (/* ( s != &temp_sibling ) &&*//* Probably unneeded */ (p->color == CNRBTREE_COLOR_RED) && (s->color == CNRBTREE_COLOR_BLACK) &&
 			(!s->left || s->left->color == CNRBTREE_COLOR_BLACK) && (!s->right || s->right->color == CNRBTREE_COLOR_BLACK))
 		{
 			s->color = CNRBTREE_COLOR_RED;
 			p->color = CNRBTREE_COLOR_BLACK;
 
-			//Need to actually remove S.
+			//Need to actually remove S. Probably unneeded.
+			/*
 			if( s == &temp_sibling )
 			{
 				if( s->parent->left == s ) s->parent->left = 0;
 				if( s->parent->right == s ) s->parent->right = 0;
 			}
+			*/
 		}
 		else
 		{
@@ -510,7 +507,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletebase( cnrbtree_generic_no
 
 //This is the template generator.  This is how new types are created.
 
-#define CNRBTREETEMPLATE( functiondecorator, key_t, data_t, comparexy, copykeyxy, deletekeyxy, doptrkey, doptrkeyinv, doptrdata, doptrdatainv ) \
+#define CNRBTREETEMPLATE( functiondecorator, key_t, data_t, comparexy, copykeyxy, deletekeyxy ) \
 	struct cnrbtree_##key_t##data_t##_node_t; \
 	typedef struct cnrbtree_##key_t##data_t##_node_t \
 	{ \
@@ -526,19 +523,19 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletebase( cnrbtree_generic_no
 	{ \
 		cnrbtree_##key_t##data_t##_node * node; \
 		int size; \
-		cnrbtree_##key_t##data_t##_node * (*access)( struct cnrbtree_##key_t##data_t##_t * tree, key_t doptrkey key ); \
+		cnrbtree_##key_t##data_t##_node * (*access)( struct cnrbtree_##key_t##data_t##_t * tree, key_t key ); \
 		void (*destroy)( struct cnrbtree_##key_t##data_t##_t * tree ); \
 		cnrbtree_##key_t##data_t##_node * begin; \
 		cnrbtree_##key_t##data_t##_node * tail; \
 	} cnrbtree_##key_t##data_t; \
 	\
-	functiondecorator cnrbtree_##key_t##data_t##_node * cnrbtree_##key_t##data_t##_getltgt( cnrbtree_##key_t##data_t * tree, key_t doptrkey key, int lt, int gt ) \
+	functiondecorator cnrbtree_##key_t##data_t##_node * cnrbtree_##key_t##data_t##_getltgt( cnrbtree_##key_t##data_t * tree, key_t key, int lt, int gt ) \
 	{\
 		cnrbtree_##key_t##data_t##_node * tmp = tree->node; \
 		cnrbtree_##key_t##data_t##_node * tmpnext = tmp; \
 		while( tmp ) \
 		{ \
-			int cmp = comparexy( key, doptrkeyinv tmp->key ); \
+			int cmp = comparexy( key, tmp->key ); \
 			if( cmp < 0 ) tmpnext = tmp->left; \
 			else if( cmp > 0 ) tmpnext = tmp->right; \
 			else return tmp; \
@@ -553,12 +550,12 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletebase( cnrbtree_generic_no
 		return 0; \
 	}\
 	\
-	functiondecorator cnrbtree_##key_t##data_t##_node * cnrbtree_##key_t##data_t##_get( cnrbtree_##key_t##data_t * tree, key_t doptrkey key ) \
+	functiondecorator cnrbtree_##key_t##data_t##_node * cnrbtree_##key_t##data_t##_get( cnrbtree_##key_t##data_t * tree, key_t key ) \
 	{\
 		return cnrbtree_##key_t##data_t##_getltgt( tree, key, 0, 0 ); \
 	}\
 	\
-	functiondecorator cnrbtree_##key_t##data_t##_node * cnrbtree_##key_t##data_t##_access( cnrbtree_##key_t##data_t * tree, key_t doptrkey key ) \
+	functiondecorator cnrbtree_##key_t##data_t##_node * cnrbtree_##key_t##data_t##_access( cnrbtree_##key_t##data_t * tree, key_t key ) \
 	{\
 		cnrbtree_##key_t##data_t##_node * tmp = 0; \
 		cnrbtree_##key_t##data_t##_node * tmpnext = 0; \
@@ -567,7 +564,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletebase( cnrbtree_generic_no
 		int cmp; \
 		while( tmp ) \
 		{ \
-			cmp = comparexy( key, doptrkeyinv tmp->key ); \
+			cmp = comparexy( key, tmp->key ); \
 			if( cmp < 0 ) tmpnext = tmp->left; \
 			else if( cmp > 0 ) tmpnext = tmp->right; \
 			else return tmp; \
@@ -577,11 +574,11 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletebase( cnrbtree_generic_no
 		ret = (cnrbtree_##key_t##data_t##_node * ) cnrbtree_generic_insert_repair_tree_with_fixup_primary( \
 			(cnrbtree_generic_node*)tmp, (cnrbtree_generic*)tree, \
 			cmp, (int)sizeof( cnrbtree_##key_t##data_t##_node ) ); \
-		copykeyxy( ret->key, key ); \
+		copykeyxy( ret->key, key, ret->data ); \
 		return ret; \
 	}\
 	\
-	functiondecorator void cnrbtree_##key_t##data_t##_delete( cnrbtree_##key_t##data_t * tree, key_t doptrkey key ) \
+	functiondecorator void cnrbtree_##key_t##data_t##_delete( cnrbtree_##key_t##data_t * tree, key_t key ) \
 	{\
 		cnrbtree_##key_t##data_t##_node * tmp = 0; \
 		cnrbtree_##key_t##data_t##_node * tmpnext = 0; \
@@ -591,7 +588,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletebase( cnrbtree_generic_no
 		int cmp; \
 		while( 1 ) \
 		{ \
-			cmp = comparexy( key, doptrkeyinv tmp->key ); \
+			cmp = comparexy( key, tmp->key ); \
 			if( cmp < 0 ) tmpnext = tmp->left; \
 			else if( cmp > 0 ) tmpnext = tmp->right; \
 			else break; \
@@ -600,12 +597,12 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletebase( cnrbtree_generic_no
 		} \
 		/* found an item, tmp, to delete. */ \
 		cnrbtree_generic_deletebase( (cnrbtree_generic_node*) tmp, (cnrbtree_generic*)tree ); \
-		deletekeyxy( doptrkeyinv tmp->key, doptrdatainv tmp->data ); \
+		deletekeyxy( tmp->key, tmp->data ); \
 		CNRBTREE_FREE(tmp); \
 	} \
 	functiondecorator void cnrbtree_##key_t##data_t##_destroy_node_internal( cnrbtree_##key_t##data_t##_node * node ) \
 	{\
-		deletekeyxy( doptrkeyinv node->key, doptrdatainv node->data ); \
+		deletekeyxy( node->key, node->data ); \
 		if( node->left ) cnrbtree_##key_t##data_t##_destroy_node_internal( node->left ); \
 		if( node->right ) cnrbtree_##key_t##data_t##_destroy_node_internal( node->right ); \
 		CNRBTREE_FREE( node ); \
@@ -625,5 +622,9 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletebase( cnrbtree_generic_no
 		return ret; \
 	}\
  
+#define RBstrcmp(x,y) strcmp(x,y)
+#define RBstrcpy(x,y,z) { x = strdup(y); }
+#define RBstrdel(x,y) free( x );
+
 #endif
 

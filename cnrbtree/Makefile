@@ -1,8 +1,12 @@
-all : testtree
+all : testtree cpptest
+
+
+cpptest : cpptest.cpp
+	g++ -o $@ $^ -O3 -g
 
 testtree : testtree.c testtree2.c
-	tcc -fextended-identifiers -o $@ $^ -O3 -g
+	gcc -o $@ $^ -O2 -g -pg
 
 clean :
-	rm -rf *.o *~ testtree
+	rm -rf *.o *~ testtree cpptest
 

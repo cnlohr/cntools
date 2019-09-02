@@ -10,10 +10,13 @@ int PrintTreeRootIt( struct cnrbtree_generic_node_t * t );
 int gints = 0;
 
 #define intcomp(x, y) ( x - y )
-#define intcopy(x, y) (x = y, gints++ ) 
+#define intcopy(x, y, z) (x = y, gints++, z = 0 ) 
 #define intdelete( x, y )     gints--;
 
-CNRBTREETEMPLATE( , int, int, intcomp, intcopy, intdelete, , , , );
+CNRBTREETEMPLATE( , int, int, intcomp, intcopy, intdelete );
+
+typedef char * str;
+CNRBTREETEMPLATE( , str, str, RBstrcmp, RBstrcpy, RBstrdel );
 
 int PrintTree( cnrbtree_intint_node * t, int depth, cnrbtree_intint_node * parent );
 
@@ -66,10 +69,68 @@ int PrintTree( cnrbtree_intint_node * t, int depth, cnrbtree_intint_node * paren
 
 int main()
 {
+#if 1
+	cnrbtree_strstr * tree = cnrbtree_strstr_create();
+
+	srand(0);
+	#define ITERATIONS 1000
+	int i, j;
+	for( j = 0; j < 3000; j++ )
+	{
+		char stta[ITERATIONS][9];
+		for( i = 0; i < ITERATIONS; i++ )
+		{
+			int k;
+			for( k = 0; k < 8; k++ ) 
+				stta[i][k] = (rand()%26) + 'a';
+			stta[i][k] = 0;
+
+			if( cnrbtree_strstr_getltgt( tree, stta[i], 0, 0 ) )
+			{
+				printf( "Duplicate.  Try again.\n" );
+				exit( 5 );
+			}
+
+			cnrbtree_strstr_access( tree, stta[i] )->data = strdup( stta[i] );
+		}
+
+		if( tree->size != ITERATIONS)
+		{
+			printf( "Size violation. %d\n", tree->size );
+			exit( 5 );
+		}
+
+		for( i = 0; i < ITERATIONS; i++ )
+		{
+			cnrbtree_strstr_node * n = cnrbtree_strstr_getltgt( tree, stta[i], 0, 0 );
+			if( !n )
+			{
+				printf( "Access fault.\n" );
+				exit( 5 );
+			}
+			free( n->data );
+			cnrbtree_strstr_delete( tree, stta[i] );
+		}
+		if( tree->node )
+		{
+			printf( "Excess fault\n" );
+			exit( 6 );
+		}
+		if( tree->size != 0 )
+		{
+			printf( "Size violation. %d\n", tree->size );
+			exit( 5 );
+		}
+
+	}
+
+
+
+#endif
+
+#if 0
 	cnrbtree_intint * tree;
 	tree = cnrbtree_intint_create();
-
-#if 1
 	srand(0);
 	#define ITERATIONS 1000
 	int addlist[ITERATIONS];
@@ -81,7 +142,8 @@ int main()
 		{
 			PrintTree( tree->node, 0, 0 );
 	retry:
-			printf( "Adding: %d\n", (addlist[i] = rand()) );
+			addlist[i] = rand();
+		//	printf( "Adding: %d\n", (addlist[i] = rand()) );
 			if( cnrbtree_intint_getltgt( tree, addlist[i], 0, 0 ) )
 			{
 				printf( "Duplicate.  Try again.\n" );
@@ -90,7 +152,7 @@ int main()
 
 
 			cnrbtree_intint_access( tree, addlist[i] )->data = 80;
-			printf( "SIZE: %d\n", tree->size );
+			//printf( "SIZE: %d\n", tree->size );
 		}
 
 		if( tree->size != ITERATIONS)
@@ -103,14 +165,14 @@ int main()
 		for( i = 0; i < ITERATIONS; i++ )
 		{
 			int k = addlist[i];
-			printf( "Deleting %d (%d)\n", k, i );
+		//	printf( "Deleting %d (%d)\n", k, i );
 			if( !cnrbtree_intint_getltgt( tree, addlist[i], 0, 0 ) )
 			{
 				printf( "Access fault.\n" );
 				exit( 5 );
 			}
 			cnrbtree_intint_delete( tree, k );
-			printf( "Deleted %d\n", k );
+		//	printf( "Deleted %d\n", k );
 			PrintTree( tree->node, 0,0 );
 		}
 		if( tree->node )
