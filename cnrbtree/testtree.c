@@ -14,8 +14,8 @@ int gints = 0;
 #define intdelete( x, y )     gints--;
 
 typedef char * str;
-CNRBTREETEMPLATE( , int, int, intcomp, intcopy, intdelete );
-CNRBTREETEMPLATE( , str, str, RBstrcmp, RBstrcpy, RBstrdel );
+CNRBTREETEMPLATE( int, int, intcomp, intcopy, intdelete );
+CNRBTREETEMPLATE( str, str, RBstrcmp, RBstrcpy, RBstrdel );
 
 int PrintTree( cnrbtree_intint_node * t, int depth, cnrbtree_intint_node * parent );
 

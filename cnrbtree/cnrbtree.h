@@ -21,6 +21,20 @@
 #define CNRBTREE_MEMSET memset
 #endif
 
+#ifndef CNRBTREE_TEMPLATECODE
+#define CNRBTREE_TEMPLATECODE 1
+#endif
+
+
+#ifndef CNRBTREE_GENERIC_DECORATOR
+#define CNRBTREE_GENERIC_DECORATOR
+#endif
+
+#ifndef CNRBTREE_TEMPLATE_DECORATOR
+#define CNRBTREE_TEMPLATE_DECORATOR
+#endif
+
+
 struct cnrbtree_generic_node_t;
 typedef struct cnrbtree_generic_node_t
 {
@@ -45,9 +59,6 @@ typedef struct cnrbtree_generic_t
 #define CNRBTREE_COLOR_RED   1
 #define CNRBTREE_COLOR_BLACK 2
 
-#ifndef CNRBTREE_GENERIC_DECORATOR
-#define CNRBTREE_GENERIC_DECORATOR __attribute__((weak))
-#endif
 
 //Shorthand for red-black access, and typesafe deletion.
 #ifndef NO_RBA
@@ -506,8 +517,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletebase( cnrbtree_generic_no
 
 
 //This is the template generator.  This is how new types are created.
-
-#define CNRBTREETEMPLATE( functiondecorator, key_t, data_t, comparexy, copykeyxy, deletekeyxy ) \
+#define CNRBTREETYPETEMPLATE( key_t, data_t ) \
 	struct cnrbtree_##key_t##data_t##_node_t; \
 	typedef struct cnrbtree_##key_t##data_t##_node_t \
 	{ \
@@ -529,7 +539,12 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletebase( cnrbtree_generic_no
 		cnrbtree_##key_t##data_t##_node * tail; \
 	} cnrbtree_##key_t##data_t; \
 	\
-	functiondecorator cnrbtree_##key_t##data_t##_node * cnrbtree_##key_t##data_t##_getltgt( cnrbtree_##key_t##data_t * tree, key_t key, int lt, int gt ) \
+
+#if CNRBTREE_TEMPLATECODE
+
+#define CNRBTREETEMPLATE( key_t, data_t, comparexy, copykeyxy, deletekeyxy ) \
+	CNRBTREETYPETEMPLATE( key_t, data_t ); \
+	CNRBTREE_TEMPLATE_DECORATOR cnrbtree_##key_t##data_t##_node * cnrbtree_##key_t##data_t##_getltgt( cnrbtree_##key_t##data_t * tree, key_t key, int lt, int gt ) \
 	{\
 		cnrbtree_##key_t##data_t##_node * tmp = tree->node; \
 		cnrbtree_##key_t##data_t##_node * tmpnext = tmp; \
@@ -550,12 +565,12 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletebase( cnrbtree_generic_no
 		return 0; \
 	}\
 	\
-	functiondecorator cnrbtree_##key_t##data_t##_node * cnrbtree_##key_t##data_t##_get( cnrbtree_##key_t##data_t * tree, key_t key ) \
+	CNRBTREE_TEMPLATE_DECORATOR cnrbtree_##key_t##data_t##_node * cnrbtree_##key_t##data_t##_get( cnrbtree_##key_t##data_t * tree, key_t key ) \
 	{\
 		return cnrbtree_##key_t##data_t##_getltgt( tree, key, 0, 0 ); \
 	}\
 	\
-	functiondecorator cnrbtree_##key_t##data_t##_node * cnrbtree_##key_t##data_t##_access( cnrbtree_##key_t##data_t * tree, key_t key ) \
+	CNRBTREE_TEMPLATE_DECORATOR cnrbtree_##key_t##data_t##_node * cnrbtree_##key_t##data_t##_access( cnrbtree_##key_t##data_t * tree, key_t key ) \
 	{\
 		cnrbtree_##key_t##data_t##_node * tmp = 0; \
 		cnrbtree_##key_t##data_t##_node * tmpnext = 0; \
@@ -578,7 +593,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletebase( cnrbtree_generic_no
 		return ret; \
 	}\
 	\
-	functiondecorator void cnrbtree_##key_t##data_t##_delete( cnrbtree_##key_t##data_t * tree, key_t key ) \
+	CNRBTREE_TEMPLATE_DECORATOR void cnrbtree_##key_t##data_t##_delete( cnrbtree_##key_t##data_t * tree, key_t key ) \
 	{\
 		cnrbtree_##key_t##data_t##_node * tmp = 0; \
 		cnrbtree_##key_t##data_t##_node * tmpnext = 0; \
@@ -600,20 +615,20 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletebase( cnrbtree_generic_no
 		deletekeyxy( tmp->key, tmp->data ); \
 		CNRBTREE_FREE(tmp); \
 	} \
-	functiondecorator void cnrbtree_##key_t##data_t##_destroy_node_internal( cnrbtree_##key_t##data_t##_node * node ) \
+	CNRBTREE_TEMPLATE_DECORATOR void cnrbtree_##key_t##data_t##_destroy_node_internal( cnrbtree_##key_t##data_t##_node * node ) \
 	{\
 		deletekeyxy( node->key, node->data ); \
 		if( node->left ) cnrbtree_##key_t##data_t##_destroy_node_internal( node->left ); \
 		if( node->right ) cnrbtree_##key_t##data_t##_destroy_node_internal( node->right ); \
 		CNRBTREE_FREE( node ); \
 	}\
-	functiondecorator void cnrbtree_##key_t##data_t##_destroy( cnrbtree_##key_t##data_t * tree ) \
+	CNRBTREE_TEMPLATE_DECORATOR void cnrbtree_##key_t##data_t##_destroy( cnrbtree_##key_t##data_t * tree ) \
 	{\
 		cnrbtree_##key_t##data_t##_destroy_node_internal( tree->node ); \
 		CNRBTREE_FREE( tree ); \
 	} \
 	\
-	functiondecorator cnrbtree_##key_t##data_t * cnrbtree_##key_t##data_t##_create() \
+	CNRBTREE_TEMPLATE_DECORATOR cnrbtree_##key_t##data_t * cnrbtree_##key_t##data_t##_create() \
 	{\
 		cnrbtree_##key_t##data_t * ret = CNRBTREE_MALLOC( sizeof( cnrbtree_##key_t##data_t ) ); \
 		CNRBTREE_MEMSET( ret, 0, sizeof( *ret ) ); \
@@ -621,7 +636,23 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletebase( cnrbtree_generic_no
 		ret->destroy = cnrbtree_##key_t##data_t##_destroy; \
 		return ret; \
 	}\
- 
+
+#else
+
+
+#define CNRBTREETEMPLATE( key_t, data_t, comparexy, copykeyxy, deletekeyxy ) \
+	CNRBTREETYPETEMPLATE( key_t, data_t ); \
+	CNRBTREE_TEMPLATE_DECORATOR cnrbtree_##key_t##data_t##_node * cnrbtree_##key_t##data_t##_getltgt( cnrbtree_##key_t##data_t * tree, key_t key, int lt, int gt ); \
+	CNRBTREE_TEMPLATE_DECORATOR cnrbtree_##key_t##data_t##_node * cnrbtree_##key_t##data_t##_get( cnrbtree_##key_t##data_t * tree, key_t key ); \
+	CNRBTREE_TEMPLATE_DECORATOR cnrbtree_##key_t##data_t##_node * cnrbtree_##key_t##data_t##_access( cnrbtree_##key_t##data_t * tree, key_t key ); \
+	CNRBTREE_TEMPLATE_DECORATOR void cnrbtree_##key_t##data_t##_delete( cnrbtree_##key_t##data_t * tree, key_t key ); \
+	CNRBTREE_TEMPLATE_DECORATOR void cnrbtree_##key_t##data_t##_destroy_node_internal( cnrbtree_##key_t##data_t##_node * node ); \
+	CNRBTREE_TEMPLATE_DECORATOR void cnrbtree_##key_t##data_t##_destroy( cnrbtree_##key_t##data_t * tree ); \
+	CNRBTREE_TEMPLATE_DECORATOR cnrbtree_##key_t##data_t * cnrbtree_##key_t##data_t##_create(); \
+
+#endif
+
+
 #define RBstrcmp(x,y) strcmp(x,y)
 #define RBstrcpy(x,y,z) { x = strdup(y); }
 #define RBstrdel(x,y) free( x );

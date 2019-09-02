@@ -12,8 +12,8 @@ typedef struct some_payload_t
 } payload;
 typedef char * str_;
 
-CNRBTREETEMPLATE( , str_ , payload, RBstrcmp, tstrcopy, RBstrdel );
-CNRBTREETEMPLATE( , str_ , int, RBstrcmp, RBstrcpy, tstrdelete );
+CNRBTREETEMPLATE( str_ , payload, RBstrcmp, tstrcopy, RBstrdel );
+CNRBTREETEMPLATE( str_ , int, RBstrcmp, RBstrcpy, tstrdelete );
 
 int anotherfn()
 {
