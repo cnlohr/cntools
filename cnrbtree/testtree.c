@@ -13,9 +13,8 @@ int gints = 0;
 #define intcopy(x, y, z) (x = y, gints++, z = 0 ) 
 #define intdelete( x, y )     gints--;
 
-CNRBTREETEMPLATE( , int, int, intcomp, intcopy, intdelete );
-
 typedef char * str;
+CNRBTREETEMPLATE( , int, int, intcomp, intcopy, intdelete );
 CNRBTREETEMPLATE( , str, str, RBstrcmp, RBstrcpy, RBstrdel );
 
 int PrintTree( cnrbtree_intint_node * t, int depth, cnrbtree_intint_node * parent );
@@ -124,7 +123,7 @@ int main()
 
 	}
 
-
+	exit( 0 );
 
 #endif
 
