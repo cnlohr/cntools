@@ -34,13 +34,14 @@ struct cnrbtree_generic_node_t;
 typedef struct cnrbtree_generic_node_t
 {
 	struct cnrbtree_generic_node_t * parent;
-	char color;
 	struct cnrbtree_generic_node_t * left;
 	struct cnrbtree_generic_node_t * right;
+	char color;
 } cnrbtree_generic_node;
 typedef struct cnrbtree_generic_t
 {
 	struct cnrbtree_generic_node_t * node;
+	int size;
 	//XXX TODO: add "size"
 } cnrbtree_generic;
 
@@ -161,33 +162,91 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_insert_repair_tree_with_fixup( 
 }
 
 
+CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_exchange_nodes_internal( cnrbtree_generic_node * n1, cnrbtree_generic_node * n )
+{
 
+	{
+		cnrbtree_generic_node tempexchange;
+		tempexchange.left = n->left;
+		tempexchange.right = n->right;
+		tempexchange.color = n->color;
+		tempexchange.parent = n->parent;
+
+		n->color = n1->color;
+		n->parent = n1->parent;
+		n->left = n1->left;
+		n->right = n1->right;
+
+		n1->color = tempexchange.color;
+		n1->parent = tempexchange.parent;
+		n1->left = tempexchange.left;
+		n1->right = tempexchange.right;
+	}
+
+	if( n1->parent == n1 ) n1->parent = n;
+	if( n->parent == n ) n->parent = n1;
+
+//I think this is OK, and automatically fixed up by the lower cases.
+//	if( n1->left == n1 ) n1->left = n;
+//	if( n->left == n ) n->left = n1;
+//	if( n1->right == n1 ) n1->right = n;
+//	if( n->right == n ) n->right = n1;
+
+	if( n1->parent )
+	{
+		if( n1->parent->left == n ) n1->parent->left = n1;
+		if( n1->parent->right == n ) n1->parent->right = n1;
+	}
+	if( n->parent )
+	{
+		if( n->parent->left == n1 ) n->parent->left = n;
+		if( n->parent->right == n1 ) n->parent->right = n;
+	}
+
+	if( n1->right ) n1->right->parent = n1;
+	if( n1->left ) n1->left->parent = n1;
+	if( n->right ) n->right->parent = n;
+	if( n->left ) n->left->parent = n;
+
+}
 
 /////////////////DELETION//////////////////
+
 
 
 CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_replace_node( cnrbtree_generic_node * n, cnrbtree_generic_node * child )
 {
 	child->parent = n->parent;
-	if (n == n->parent->left) {
-		n->parent->left = child;
-	} else {
-		n->parent->right = child;
+
+	if( n->parent )
+	{
+		if (n == n->parent->left) {
+			n->parent->left = child;
+		} else {
+			n->parent->right = child;
+		}
 	}
 }
 
 CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletecase1( cnrbtree_generic_node * n )
 {
+	cnrbtree_generic_node temp_sibling;
+	temp_sibling.left = 0;
+	temp_sibling.right = 0;
+	temp_sibling.color = CNRBTREE_COLOR_BLACK;
+	temp_sibling.parent = 0;
+
 	cnrbtree_generic_node * p = n->parent;
+
 	if( !p ) return;
+
+	if( n->color == CNRBTREE_COLOR_RED && !n->left && !n->right ) return;
 
 	//DeleteCase2
 	cnrbtree_generic_node * s = (p->left == n)?p->right:p->left; /* Sibling */
-	printf( "n %p p %p [%p %p] s: %p\n", n, p, p->left, p->right, s );
-
+	PrintTreeRootIt( n );
 	if (s && s->color == CNRBTREE_COLOR_RED)
 	{
-		printf( "PASS 1\n" );
 		p->color = CNRBTREE_COLOR_RED;
 		s->color = CNRBTREE_COLOR_BLACK;
 		if (n == p->left) {
@@ -195,65 +254,78 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletecase1( cnrbtree_generic_n
 		} else {
 			cnrbtree_generic_rotateright(p);
 		}
-		printf( "p: %p n: %p n->p: %p   p->l: %p, p->r %p\n", p, n, n->parent, p->left, p->right );
-		p = n->parent;
-		printf( "p: %p n: %p n->p: %p   p->l: %p, p->r %p\n", p, n, n->parent, p->left, p->right );
-		s = (p->left == n)?p->right:p->left; /* Update sibling */
-		printf( "Sibling: %p\n", s );
+		//printf( "p: %p n: %p n->p: %p   p->l: %p, p->r %p\n", p, n, n->parent, p->left, p->right );
+		//p = n->parent; N's parent remains the same in this operation I think?
+		s = (p->left == n)?p->right:p->left; //But the sibling updates.
 	}
 
-	//DeleteCase3
-	if ((p->color == CNRBTREE_COLOR_BLACK) && (!s || s->color == CNRBTREE_COLOR_BLACK) &&
-		(!s || !s->left || s->left->color == CNRBTREE_COLOR_BLACK) && (!s || !s->right || s->right->color == CNRBTREE_COLOR_BLACK))
+
+	//Tricky! We can't have S be void.
+	if( !s )
 	{
-		if( s )
-		{
-			s->color = CNRBTREE_COLOR_RED;
-		}
-		else printf( "Invalid S Set Red CS3\n" );
+
+		s = &temp_sibling;
+		s->parent = p;
+		if( s->parent->left == 0 ) s->parent->left = s;
+		if( s->parent->right == 0 ) s->parent->right = s;
+	}
+
+
+	//DeleteCase3
+	if ( (p->color == CNRBTREE_COLOR_BLACK) && ( s->color == CNRBTREE_COLOR_BLACK) &&
+		( !s->left || s->left->color == CNRBTREE_COLOR_BLACK) && ( !s->right || s->right->color == CNRBTREE_COLOR_BLACK))
+	{
+		s->color = CNRBTREE_COLOR_RED;
 		cnrbtree_generic_deletecase1( p );
+		p = n->parent;
+		s = (p->left == n)?p->right:p->left; 
 	}
 	else
 	{
 		//DeleteCase4(n);
-		printf( "{{ n: %p  p: %p s: %p\n", n, p, s );
-		if ((p->color == CNRBTREE_COLOR_RED) && (!s || s->color == CNRBTREE_COLOR_BLACK) &&
-			(!s || !s->left || s->left->color == CNRBTREE_COLOR_BLACK) && (!s || !s->right || s->right->color == CNRBTREE_COLOR_BLACK))
+		if ( ( s != &temp_sibling ) /* !!?@?@!? XXX Do we want this test?!? */ && (p->color == CNRBTREE_COLOR_RED) && (s->color == CNRBTREE_COLOR_BLACK) &&
+			(!s->left || s->left->color == CNRBTREE_COLOR_BLACK) && (!s->right || s->right->color == CNRBTREE_COLOR_BLACK))
 		{
-			if( s )
-			{
-				s->color = CNRBTREE_COLOR_RED;
-			}
-			else printf( "Invalid S Set Red CS4\n" );
+			s->color = CNRBTREE_COLOR_RED;
 			p->color = CNRBTREE_COLOR_BLACK;
+
+			//Need to actually remove S.
+			if( s == &temp_sibling )
+			{
+				if( s->parent->left == s ) s->parent->left = 0;
+				if( s->parent->right == s ) s->parent->right = 0;
+			}
 		}
 		else
 		{
 			//DeleteCase5(n);
-
 			// This if statement is trivial, due to case 2 (even though case 2 changed
 			// the sibling to a sibling's child, the sibling's child can't be red, since
 			// no red parent can have a red child).
 			if (s->color == CNRBTREE_COLOR_BLACK)
 			{
-			// The following statements just force the red to be on the left of the
+				// The following statements just force the red to be on the left of the
 				// left of the parent, or right of the right, so case six will rotate
 				// correctly.
 				if ((n == p->left) && (!s->right || s->right->color == CNRBTREE_COLOR_BLACK) &&
 					(s->left && s->left->color == CNRBTREE_COLOR_RED))
 				{
-						// This last test is trivial too due to cases 2-4.
-						s->color = CNRBTREE_COLOR_RED;
-						if( s->left ) s->left->color = CNRBTREE_COLOR_BLACK;
-						cnrbtree_generic_rotateright(s);
+					// This last test is trivial too due to cases 2-4.
+					s->color = CNRBTREE_COLOR_RED;
+					if( s->left ) s->left->color = CNRBTREE_COLOR_BLACK;
+					cnrbtree_generic_rotateright(s);
+					p = n->parent;
+					s = (p->left == n)?p->right:p->left; 
 				}
 				else if ((n == p->right) && (!s->left || s->left->color == CNRBTREE_COLOR_BLACK) &&
 						   (s->right && s->right->color == CNRBTREE_COLOR_RED))
 				{
-						// This last test is trivial too due to cases 2-4.
-						s->color = CNRBTREE_COLOR_RED;
-						if(s->right ) s->right->color = CNRBTREE_COLOR_BLACK;
-						cnrbtree_generic_rotateleft(s);
+					// This last test is trivial too due to cases 2-4.
+					s->color = CNRBTREE_COLOR_RED;
+					if(s->right ) s->right->color = CNRBTREE_COLOR_BLACK;
+					cnrbtree_generic_rotateleft(s);
+					p = n->parent;
+					s = (p->left == n)?p->right:p->left; 
 				}
 			}
 
@@ -268,8 +340,33 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletecase1( cnrbtree_generic_n
 				if( s->left ) s->left->color = CNRBTREE_COLOR_BLACK;
 				cnrbtree_generic_rotateright( p );
 			}
+
+			//Need to actually remove S. (CLEANUP)
+			if( s == &temp_sibling )
+			{
+				if( s->parent->left == s ) s->parent->left = 0;
+				if( s->parent->right == s ) s->parent->right = 0;
+			}
 		}
 	}
+}
+
+
+CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_delete_exactly_one( cnrbtree_generic_node * n, cnrbtree_generic * t )
+{
+	//DeleteOneChild (from the regular Wikipedia red black tree article)
+	cnrbtree_generic_node * child = (!n->right) ? n->left : n->right;
+
+	cnrbtree_generic_replace_node( n, child );
+	if (n->color == CNRBTREE_COLOR_BLACK) {
+		if (child->color == CNRBTREE_COLOR_RED) {
+			child->color = CNRBTREE_COLOR_BLACK;
+		} else {
+			cnrbtree_generic_deletecase1(child);
+		}
+	}
+	while( child->parent ) child = child->parent;
+	t->node = child;
 }
 
 CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletebase( cnrbtree_generic_node * n, cnrbtree_generic * t )
@@ -277,7 +374,6 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletebase( cnrbtree_generic_no
 	if( !n->right && !n->left )
 	{
 		//Has no children
-		printf( "NO CHILDREN\n" );
 		cnrbtree_generic_deletecase1( n ); //I don't know if this is correct.
 		cnrbtree_generic_node * p = n->parent;
 		if( p )
@@ -285,65 +381,35 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletebase( cnrbtree_generic_no
 			if( p->left == n ) p->left = 0;
 			if( p->right == n ) p->right = 0;
 		}
-		while( p->parent ) p = p->parent;
+		if( p )	while( p->parent ) p = p->parent;
 		t->node = p;
 	}
 	else if( n->right && n->left )
 	{
-		//Standard delete; but we're only going to do left deletes.
-		//XXX WARNING: I think this code produces a non-true red-black tree at worst case.  Not sure how to improve.
-
 		int origcolor = n->color;
 		cnrbtree_generic_node * p = n->parent;
 		cnrbtree_generic_node * farright_in_left = n->left;
-
 		while( farright_in_left->right ) farright_in_left = farright_in_left->right;
 
-		//We have the far right node in our left subtree.  It does not have a right tree.
-		//Detach its parent. If it's a leaf node, that's OK.
-		if( farright_in_left->parent != n )
-			farright_in_left->parent->right = farright_in_left->left;
+		cnrbtree_generic_exchange_nodes_internal( n, farright_in_left );
 
-		farright_in_left->left = n->left;
-		farright_in_left->right = n->right;
-		farright_in_left->color = origcolor;
-		farright_in_left->parent = p;
-		if( farright_in_left->right == farright_in_left ) farright_in_left->right = 0;
-		if( farright_in_left->left == farright_in_left ) farright_in_left->left = 0;
-		if( farright_in_left->right ) farright_in_left->right->parent = farright_in_left;
-		if( farright_in_left->left ) farright_in_left->left->parent = farright_in_left;
-
-		if( p != n->parent ) printf( "Warning: Check that should be deleted can't be deleted\n" );
-		p = n->parent;
-
-		if( p )
-		{
-			if( p->left == n ) p->left = farright_in_left;
-			if( p->right == n ) p->right = farright_in_left;
-		}
+		cnrbtree_generic_deletecase1( n ); //I don't know if this is correct.
+	//	cnrbtree_generic_delete_exactly_one( n, t );
+	//	cnrbtree_generic_deletebase( n,t );
 
 		while( farright_in_left->parent ) farright_in_left = farright_in_left->parent;
 		t->node = farright_in_left;
+
+		if( n->parent->left == n ) n->parent->left = n->left;
+		if( n->parent->right == n ) n->parent->right = n->left;
+
+		//??? Not sure why I need to do this?
+		if( n->left ) n->left->parent = n->parent;
+		if( n->right ) n->left->parent = n->parent;
 	}
 	else
 	{
-		//Exactly one child.
-
-		//DeleteOneChild (from the regular Wikipedia red black tree article)
-		cnrbtree_generic_node * child = (!n->right) ? n->left : n->right;
-
-		cnrbtree_generic_replace_node( n, child );
-		if (n->color == CNRBTREE_COLOR_BLACK) {
-			if (child->color == CNRBTREE_COLOR_RED) {
-				child->color = CNRBTREE_COLOR_BLACK;
-			} else {
-				cnrbtree_generic_deletecase1(child);
-			}
-		}
-
-		//Child becomes the root.
-		while( child->parent ) child = child->parent;
-		t->node = child;
+		cnrbtree_generic_delete_exactly_one( n, t );
 	}
 
 	return;
@@ -351,24 +417,13 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletebase( cnrbtree_generic_no
 
 
 
-#if 0
 
-CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletebase( cnrbtree_generic_node * n, cnrbtree_generic * t )
-{
-		//https://www.youtube.com/watch?v=CTvfzU_uNKE
-	if( n->left && n->right ) //:27 
-	{
-		//Two not-null children.
-		//Convert to case with 0 or 1 not null children.
-	}
 
-	//Check if red or child is red, then do replace :39
-	cnrbtree_generic_node * child = n->left?n->left:n->right;
-	
-	//If we have a double-black case, we do this.
-}
 
-#endif
+
+
+
+
 
 
 
@@ -383,15 +438,16 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletebase( cnrbtree_generic_no
 	typedef struct cnrbtree_##key_t##data_t##_node_t \
 	{ \
 		struct cnrbtree_##key_t##data_t##_node_t * parent; \
-		char color; \
 		struct cnrbtree_##key_t##data_t##_node_t * left; \
 		struct cnrbtree_##key_t##data_t##_node_t * right; \
+		char color; \
 		key_t key; \
 		data_t data; \
 	} cnrbtree_##key_t##data_t##_node; \
 	typedef struct cnrbtree_##key_t##data_t##_t \
 	{ \
 		cnrbtree_##key_t##data_t##_node * node; \
+		int size; \
 	} cnrbtree_##key_t##data_t; \
 	functiondecorator cnrbtree_##key_t##data_t * cnrbtree##key_t##data_t##create() \
 	{\
@@ -399,7 +455,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletebase( cnrbtree_generic_no
 		memset( ret, 0, sizeof( *ret ) ); \
 		return ret; \
 	}\
-	functiondecorator cnrbtree_##key_t##data_t##_node * cnrbtree_##key_t##data_t##getltgt( cnrbtree_##key_t##data_t * tree, key_t doptrkey key, int lt, int gt ) \
+	functiondecorator cnrbtree_##key_t##data_t##_node * cnrbtree##key_t##data_t##getltgt( cnrbtree_##key_t##data_t * tree, key_t doptrkey key, int lt, int gt ) \
 	{\
 		cnrbtree_##key_t##data_t##_node * tmp = tree->node; \
 		cnrbtree_##key_t##data_t##_node * tmpnext = tmp; \

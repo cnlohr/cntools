@@ -1,7 +1,7 @@
 all : testtree
 
 testtree : testtree.c
-	gcc -o $@ $^ -O0 -g
+	gcc -o $@ $^ -Os -g
 
 clean :
 	rm -rf *.o *~ testtree
