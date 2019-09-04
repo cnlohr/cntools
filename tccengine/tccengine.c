@@ -145,7 +145,7 @@ int TCCECheck( TCCEngine * tce, int first )
 	tcc_add_include_path( tce->state, "tcc/include_tcc/include" );
 	tcc_add_include_path( tce->state, "." );
 	tcc_define_symbol( tce->state, "TCC", 0 );
-	tcc_set_options( tce->state, "-nostdlib" );
+	tcc_set_options( tce->state, "-nostdlib -rdynamic" );
 
 #ifdef WIN32
 	tcc_define_symbol( tce->state, "WIN32", "1" );

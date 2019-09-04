@@ -60,7 +60,7 @@
      printf( "%d\n", RBA(tree, "c").myvalue );
 
      //Iterate through them all.
-     RBF+-OREACH( str_payload, tree, i )
+     RBFOREACH( str_payload, tree, i )
      {
          printf( ".key = %s .myvalue = %d\n", i->key, i-data.myvalue );
      }
@@ -159,6 +159,7 @@ typedef struct cnrbtree_generic_t
 CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletebase( cnrbtree_generic_node * n, cnrbtree_generic * t );
 CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_insert_repair_tree_with_fixup_primary( cnrbtree_generic_node * tmp, cnrbtree_generic * tree, int cmp, int sizetoalloc );
 CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_next( cnrbtree_generic_node * node );
+CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_prev( cnrbtree_generic_node * node );
 
 
 
@@ -178,6 +179,24 @@ CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_next( cnrbtr
 		return node->parent;
 	}
 	while( node->parent && node->parent->right == node ) node = node->parent;
+	return node->parent;
+}
+
+
+CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_prev( cnrbtree_generic_node * node )
+{
+	if( !node ) return 0;
+	if( node->left )
+	{
+		node = node->left;
+		while( node->right ) node = node->right;
+		return node;
+	}
+	if( node->parent && node == node->parent->right )
+	{
+		return node->parent;
+	}
+	while( node->parent && node->parent->left == node ) node = node->parent;
 	return node->parent;
 }
 
@@ -629,7 +648,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletebase( cnrbtree_generic_no
 
 #define CNRBTREETEMPLATE( key_t, data_t, comparexy, copykeyxy, deletekeyxy ) \
 	CNRBTREETYPETEMPLATE( key_t, data_t ); \
-	CNRBTREE_TEMPLATE_DECORATOR cnrbtree_##key_t##data_t##_node * cnrbtree_##key_t##data_t##_getltgt( cnrbtree_##key_t##data_t * tree, key_t key, int lt, int gt ) \
+	CNRBTREE_TEMPLATE_DECORATOR cnrbtree_##key_t##data_t##_node * cnrbtree_##key_t##data_t##_get2( cnrbtree_##key_t##data_t * tree, key_t key, int approx ) \
 	{\
 		cnrbtree_##key_t##data_t##_node * tmp = tree->node; \
 		cnrbtree_##key_t##data_t##_node * tmpnext = tmp; \
@@ -641,9 +660,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletebase( cnrbtree_generic_no
 			else return tmp; \
 			if( tmpnext == 0 ) \
 			{ \
-				if( lt && tmp->left ) return tmp->left; \
-				if( gt && tmp->right ) return tmp->right; \
-				break; \
+				return approx?tmp:0; \
 			} \
 			tmp = tmpnext; \
 		} \
@@ -652,7 +669,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletebase( cnrbtree_generic_no
 	\
 	CNRBTREE_TEMPLATE_DECORATOR cnrbtree_##key_t##data_t##_node * cnrbtree_##key_t##data_t##_get( cnrbtree_##key_t##data_t * tree, key_t key ) \
 	{\
-		return cnrbtree_##key_t##data_t##_getltgt( tree, key, 0, 0 ); \
+		return cnrbtree_##key_t##data_t##_get2( tree, key, 0 ); \
 	}\
 	\
 	CNRBTREE_TEMPLATE_DECORATOR cnrbtree_##key_t##data_t##_node * cnrbtree_##key_t##data_t##_access( cnrbtree_##key_t##data_t * tree, key_t key ) \
@@ -727,7 +744,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletebase( cnrbtree_generic_no
 
 #define CNRBTREETEMPLATE( key_t, data_t, comparexy, copykeyxy, deletekeyxy ) \
 	CNRBTREETYPETEMPLATE( key_t, data_t ); \
-	CNRBTREE_TEMPLATE_DECORATOR cnrbtree_##key_t##data_t##_node * cnrbtree_##key_t##data_t##_getltgt( cnrbtree_##key_t##data_t * tree, key_t key, int lt, int gt ); \
+	CNRBTREE_TEMPLATE_DECORATOR cnrbtree_##key_t##data_t##_node * cnrbtree_##key_t##data_t##_get2( cnrbtree_##key_t##data_t * tree, key_t key, int approx ); \
 	CNRBTREE_TEMPLATE_DECORATOR cnrbtree_##key_t##data_t##_node * cnrbtree_##key_t##data_t##_get( cnrbtree_##key_t##data_t * tree, key_t key ); \
 	CNRBTREE_TEMPLATE_DECORATOR cnrbtree_##key_t##data_t##_node * cnrbtree_##key_t##data_t##_access( cnrbtree_##key_t##data_t * tree, key_t key ); \
 	CNRBTREE_TEMPLATE_DECORATOR void cnrbtree_##key_t##data_t##_delete( cnrbtree_##key_t##data_t * tree, key_t key ); \
@@ -741,6 +758,11 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletebase( cnrbtree_generic_no
 #define RBstrcmp(x,y) strcmp(x,y)
 #define RBstrcpy(x,y,z) { x = strdup(y); }
 #define RBstrdel(x,y) free( x );
+#define RBCBSTR RBstrcmp, RBstrcpy, RBstrdel
+
+#define RBptrcmp(x,y) (x-y)
+#define RBptrcpy(x,y,z) { x = y; }
+#define RBCBPTR RBptrcmp, RBptrcpy
 
 #endif
 

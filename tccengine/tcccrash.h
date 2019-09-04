@@ -5,6 +5,9 @@
 #ifndef _TCC_CRASH_H
 #define _TCC_CRASH_H
 
+#include <stdint.h>
+#include <setjmp.h>
+
 //Things this needs to do:
 //1: Provide a "checkpoint" for caught system exceptions
 //2: Create a tree of all known symbols.
@@ -12,55 +15,36 @@
 
 void tcccrash_install();
 int  tcccrash_checkpoint();
+#define  tcccrash_checkpoint() (sigsetjmp( tcccrash_getcheckpoint()->jmpbuf, -1))
 char * tcccrash_getcrash();
 void tcccrash_closethread();
 
 typedef struct tcccrash_syminfo_t
 {
 	void  * tag;
-	const char * symbol;
-	const char * path;
+	char * name;
+	char * path;
 	intptr_t address;
 	int size;
 } tcccrash_syminfo;
 
-//TCCCrash will handle deleting the pointer from here if need be.
-void tcccrash_symset( void * tag, tcccrash_syminfo * symadd );
-void tcccrash_deltag( void * tag );
-int tcccrash_symget( intptr_t address, tcccrash_syminfo ** symadd );
 
-
-#if 0
-
-
-#include <setjmp.h>
-
-
-#if defined( TCC )
-#define TCCRASHTHREADLOCAL 0
-#elif defined( __GNUC__ ) || defined( __clang__ )
-#define TCCRASHTHREADLOCAL __thread
-#elif defined( _MSC_VER )
-#define TCCRASHTHREADLOCAL __declspec(thread)
-#else
-#error No thread-local storage defined for this platform
-#endif
-
-struct tcccrashcheckpoint_t
+typedef struct tcccrashcheckpoint_t
 {
+	jmp_buf jmpbuf;
+	int did_crash;
+	int can_jump;
+	char * lastcrash;
+	intptr_t * btrace;	//Not needed in Windows?
 } tcccrashcheckpoint;
 
-#if TCCRASHTHREADLOCAL == 0
+//TCCCrash will handle deleting the pointer from here if need be.
+tcccrashcheckpoint * tcccrash_getcheckpoint();
+void tcccrash_symset( void * tag, tcccrash_syminfo * symadd );
+void tcccrash_deltag( void * tag );
+tcccrash_syminfo * tcccrash_symget( intptr_t address );
 
-extern TCCRASHTHREADLOCAL jmp_buf jblocal;
-
-#define TCC_CRASH_CHECKPOINT() \
-	( setjmp( 
-
-//Returns 0 if no crash happened.
-int tcccrash_checkpoint();
 
 #endif
 
-#endif
 

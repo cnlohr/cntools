@@ -1,30 +1,58 @@
 #include "tccexports.h"
 #include "../os_generic.h"
 
+static int k;
+
 struct ScriptStructure
 {
 	int compiles;
 };
+
+
+int inner2()
+{
+	k++;
+	if( k % 10 == 9 )
+	{
+		char * v = 0;
+		*v = 5;
+	}
+}
+
+
 
 int init( struct ScriptStructure * cid )
 {
 	printf( "Init\n" );
 }
 
+
+
+
 int start( struct ScriptStructure * cid )
 {
 	printf( "Start\n" );
+	k = 0;
 	cid->compiles++;
 }
+
+
+int inner()
+{
+	inner2();
+}
+
 
 int stop( struct ScriptStructure * cid )
 {
 	printf( "Stop\n" );
 }
 
+
 int update( struct ScriptStructure * cid )
 {
-	printf( "Update: %d %f\n", cid->compiles, OGGetAbsoluteTime() );
+	inner();
+	printf( "Update: %d %f %p %p %pEND:%p\n", cid->compiles, OGGetAbsoluteTime(), &update, &inner, &inner2,&init );
 }
 
 
