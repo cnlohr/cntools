@@ -36,6 +36,7 @@ typedef struct tcccrashcheckpoint_t
 	int can_jump;
 	char * lastcrash;
 	intptr_t * btrace;	//Not needed in Windows?
+	uint8_t * signalstack; //Not used in windows? Also, unused in non-root instances.
 } tcccrashcheckpoint;
 
 //TCCCrash will handle deleting the pointer from here if need be.

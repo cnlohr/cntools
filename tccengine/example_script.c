@@ -11,9 +11,9 @@ struct ScriptStructure
 
 int inner2()
 {
-	k++;
 	if( k % 10 == 9 )
 	{
+		inner2();
 		char * v = 0;
 		*v = 5;
 	}
@@ -39,6 +39,7 @@ int start( struct ScriptStructure * cid )
 
 int inner()
 {
+	k++;
 	inner2();
 }
 

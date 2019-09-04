@@ -11,6 +11,7 @@
 #include <cnrbtree.h>
 
 
+#define CRASHDUMPSTACKSIZE 8192
 #define CRASHDUMPBUFFER 8192
 #define MAXBTDEPTH 64
 
@@ -260,7 +261,15 @@ static void SetupCrashHandler()
     memset(&sa, 0, sizeof(struct sigaction));
     sigemptyset(&sa.sa_mask);
     sa.sa_handler = (void*)sighandler;//void sighandler(int sig, struct sigcontext ctx)
-    sa.sa_flags   = SA_RESTART | SA_SIGINFO;
+
+	stack_t ss;
+	ss.ss_sp = scratchcp.signalstack;
+	ss.ss_flags = 0;
+	ss.ss_size = CRASHDUMPSTACKSIZE;
+	sigaltstack( &ss, 0);
+
+
+    sa.sa_flags   = SA_RESTART | SA_SIGINFO | SA_ONSTACK;
     sigaction(SIGSEGV, &sa, NULL);
     sigaction(SIGABRT, &sa, NULL);
     sigaction(SIGFPE, &sa, NULL);
@@ -289,6 +298,7 @@ static void setup_symbols();
 
 void tcccrash_install()
 {
+	scratchcp.signalstack = malloc( CRASHDUMPSTACKSIZE );
 	setupkey();
 	EnumerateSymbols();
 	SetupCrashHandler();
