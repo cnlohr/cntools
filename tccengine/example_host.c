@@ -26,7 +26,8 @@ int ecaller()
 
 void PostFn( TCCEngine * tce )
 {
-	printf( "POST\n" );
+	printf( "POST %p %p\n", tce->state, tce->backuptcc );
+	if( tce->backuptcc ) tcccrash_deltag( tce->backuptcc );
 	tcccrash_symtcc( tce->filename, tce->state );
 }
 
@@ -47,6 +48,11 @@ int main()
 	{
 		TCCECheck( e, 0 );
 		ecaller();
+		//uint32_t * localk = tcccrash_symaddr( e->state, "k" );
+		//printf( "%p\n", localk );
+		//printf( "%d\n", *localk );
+
+
 		OGUSleep( 100000 );
 	}
 }

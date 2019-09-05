@@ -166,7 +166,7 @@ void sighandler(int sig,  siginfo_t *info, struct sigcontext ctx)
 	tcccrash_syminfo * sel;
 	char * stp = cp->lastcrash;
 	char * stpstart = stp;
-	intptr_t * btrace = cp->btrace;
+	void ** btrace = cp->btrace;
 	int i;
 
 
@@ -184,17 +184,17 @@ void sighandler(int sig,  siginfo_t *info, struct sigcontext ctx)
 
 	//https://www.linuxjournal.com/files/linuxjournal.com/linuxjournal/articles/063/6391/6391l2.html
 //	printf( "CTX: %p\n", ctx.rbp );
-	intptr_t ip;
+	void * ip;
 	#ifdef __i386__
-	ip = ctx.oldmask; //not eip - not sure why
+	ip = (void*)ctx.oldmask; //not eip - not sure why
 	#else
-	ip = ctx.oldmask; //not rip - not sure why
+	ip = (void*)ctx.oldmask; //not rip - not sure why
 	#endif
 
 	sel = tcccrash_symget( ip );
 	if( sel )
 	{
-		stp += sprintf( stp, "EIP: %p: %s : %s(+0x%02x)\n", (void*)ip, sel->path, sel->name, (int)(ip - sel->address) );
+		stp += sprintf( stp, "EIP: %p: %s : %s(+0x%02x)\n", (void*)ip, sel->path, sel->name, (int)(intptr_t)(ip - sel->address) );
 		printf( "%s**\n", sel->name );
 	}
 	else
@@ -213,7 +213,7 @@ void sighandler(int sig,  siginfo_t *info, struct sigcontext ctx)
 		ip = btrace[i];
 		if( sel )
 		{
-			stp += sprintf( stp, "[%p] %s : %s(+0x%02x)\n", (void*)ip, sel->path, sel->name, (int)(ip-sel->address) );
+			stp += sprintf( stp, "[%p] %s : %s(+0x%02x)\n", (void*)ip, sel->path, sel->name, (int)(intptr_t)(ip-sel->address) );
 		}
 		else
 		{
@@ -285,7 +285,7 @@ static int TCCCrashSymEnumeratorCallback( const char * path, const char * name, 
 	sn->name = strdup( name );
 	sn->path = strdup( path );
 	sn->tag = 0;
-	sn->address = (intptr_t)location;
+	sn->address = (void *)location;
 	sn->size = size;
 	tcccrash_symset( 0, sn );
 	return 0;
@@ -356,50 +356,61 @@ typedef void * ptr;
 
 #define RBsptrcpy(x,y,z) { x = y; z = 0; }
 
-
+typedef char * str;
 CNRBTREETEMPLATE( ptr, simi, RBptrcmp, RBsptrcpy, delsymi ); //defines cnrbtree_ptrsimi
+CNRBTREETEMPLATE( str, simi, RBstrcmp, RBstrcpy, RBstrdel ); //defines cnrbtree_ptrptrsimi
 typedef cnrbtree_ptrsimi * ptrsimi;
+typedef cnrbtree_strsimi * strsimi;
+CNRBTREETEMPLATE( ptr, strsimi, RBptrcmp, RBsptrcpy, deltree ); //defines cnrbtree_ptrstrsimi
 CNRBTREETEMPLATE( ptr, ptrsimi, RBptrcmp, RBsptrcpy, deltree ); //defines cnrbtree_ptrptrsimi
 
 static cnrbtree_ptrptrsimi * symroot;
+static cnrbtree_ptrstrsimi * symroot_name;
 
 static void setup_symbols()
 {
 	symroot = cnrbtree_ptrptrsimi_create();
+	symroot_name = cnrbtree_ptrstrsimi_create();
 }
 
 void tcccrash_symset( void * tag, tcccrash_syminfo * symadd )
 {
 	ptrsimi tagptr = RBA( symroot, tag );
+	strsimi tagptr_name = RBA( symroot_name, tag );
 	if( !tagptr )
 	{
 		tagptr = cnrbtree_ptrsimi_create();
 		RBA( symroot, tag ) = tagptr;
+		tagptr_name = cnrbtree_strsimi_create();
+		RBA( symroot_name, tag ) = tagptr_name;
 	}
 	tcccrash_syminfo * cs = RBA( tagptr, (void*)symadd->address );
 	if( !cs ) cs = malloc( sizeof( *cs ) );
 	memcpy( cs, symadd, sizeof( *cs ) );
 	cs->tag = tag;
+	printf( "%p = %s\n", symadd->address, symadd->name );
 	RBA( tagptr, (void*)symadd->address ) = cs;
+	RBA( tagptr_name, symadd->name ) = cs;
 }
 
 void tcccrash_deltag( void * tag )
 {
 	cnrbtree_ptrptrsimi_delete( symroot, tag );
+	cnrbtree_ptrstrsimi_delete( symroot_name, tag );
 }
 
-tcccrash_syminfo * tcccrash_symget( intptr_t address )
+tcccrash_syminfo * tcccrash_symget( void * address )
 {
 	tcccrash_syminfo * ret = 0;
-	uintptr_t mindiff = -1;
+	intptr_t mindiff = 0;
 	RBFOREACH( ptrptrsimi, symroot, i )
 	{
 		cnrbtree_ptrsimi_node * n = cnrbtree_ptrsimi_get2( i->data, (void*)address, 1 );
 		if( n->data->address > address )
 			n = (void*)cnrbtree_generic_prev( (void*)n );
 		if( !n ) continue;
-		uintptr_t diff = address - n->data->address;
-		if( diff < mindiff && diff < n->data->size + 16 )
+		intptr_t diff = (intptr_t)((char*)address - (char*)n->data->address);
+		if( mindiff == 0 || ( diff < mindiff && diff < n->data->size + 16 ) )
 		{
 			ret = n->data;
 			mindiff = diff;
@@ -432,10 +443,19 @@ void tcccrash_symtcc( const char * file, TCCState * state )
 		const char * name1 = (char *) symtab->link->data + sym->st_name;
 		tcccrash_syminfo * sn = dupsym( name1, file );
 		sn->tag = state;
-		sn->address = sym->st_value;
+		sn->address = (void*)sym->st_value;
 		sn->size = sym->st_size;
 		tcccrash_symset( state, sn );
 	}
+}
+
+void * tcccrash_symaddr( void * tag, const char * symbol )
+{
+	cnrbtree_ptrstrsimi_node * nrt = cnrbtree_ptrstrsimi_get( symroot_name, tag  );
+	if( !nrt ) return 0;
+	cnrbtree_strsimi_node * n = cnrbtree_strsimi_get( nrt->data, (char*)symbol );
+	if( !n || !n->data ) return 0;
+	return (void*)n->data->address;
 }
 
 

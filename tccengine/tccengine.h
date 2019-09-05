@@ -57,6 +57,7 @@ struct TCCEngine
 	double attachedtp[MAX_ATTACHED_FILES];
 
 	TCCState * state;
+	TCCState * backuptcc; //If reloading.
 	PopulateTCCEFunction popfn;
 	PopulateTCCEFunction postfn;
 	void * image;

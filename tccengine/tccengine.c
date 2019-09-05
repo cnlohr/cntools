@@ -79,7 +79,6 @@ int TCCECheck( TCCEngine * tce, int first )
 {
 	OGLockMutex( TCCMutex );
 
-	TCCState * backuptcc;
 	int r, i;
 /*
 	char * program;
@@ -128,7 +127,7 @@ int TCCECheck( TCCEngine * tce, int first )
 	OGUSleep( 1000 ); //On Windows, sometimes files get corrupt if you try reading them too soon.
 
 	tce->readtime = readtime;
-	backuptcc = tce->state;
+	tce->backuptcc = tce->state;
 	
 	tce->state = tcc_new();
 	tcc_set_output_type(tce->state, TCC_OUTPUT_MEMORY);
@@ -189,8 +188,8 @@ int TCCECheck( TCCEngine * tce, int first )
 	tce->image = malloc(r);
 	tcc_relocate( tce->state, tce->image );
 	if( tce->postfn ) tce->postfn( tce );
-	if( backuptcc )
-		tcc_delete( backuptcc );
+	if( tce->backuptcc )
+		tcc_delete( tce->backuptcc );
 
 	if( backupimage ) free( backupimage );
 
@@ -214,7 +213,7 @@ int TCCECheck( TCCEngine * tce, int first )
 	return 1;
 end_err:
 	tcc_delete( tce->state );
-	tce->state = backuptcc;
+	tce->state = tce->backuptcc;
 	return -1;
 }
 
