@@ -48,6 +48,11 @@ int main()
 	{
 		TCCECheck( e, 0 );
 		ecaller();
+		//uint32_t * localk = tcccrash_symaddr( e->state, "k" );
+		//printf( "%p\n", localk );
+		//printf( "%d\n", *localk );
+
+
 		OGUSleep( 100000 );
 	}
 }

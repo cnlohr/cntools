@@ -25,7 +25,7 @@ typedef struct tcccrash_syminfo_t
 	void  * tag;
 	char * name;
 	char * path;
-	intptr_t address;
+	void * address;
 	int size;
 } tcccrash_syminfo;
 
@@ -36,7 +36,7 @@ typedef struct tcccrashcheckpoint_t
 	int did_crash;
 	int can_jump;
 	char * lastcrash;
-	intptr_t * btrace;	//Not needed in Windows?
+	void ** btrace;	//Not needed in Windows?
 	uint8_t * signalstack; //Not used in windows? Also, unused in non-root instances.
 } tcccrashcheckpoint;
 
@@ -50,7 +50,8 @@ typedef struct TCCState TCCState;
 tcccrashcheckpoint * tcccrash_getcheckpoint();
 void tcccrash_symset( void * tag, tcccrash_syminfo * symadd );
 void tcccrash_deltag( void * tag );
-tcccrash_syminfo * tcccrash_symget( intptr_t address );
+tcccrash_syminfo * tcccrash_symget( void * address );
+void * tcccrash_symaddr( void * tag, const char * symbol );
 void tcccrash_symtcc( const char * file, TCCState * tcc );
 
 #endif
