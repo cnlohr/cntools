@@ -58,6 +58,7 @@ struct TCCEngine
 
 	TCCState * state;
 	PopulateTCCEFunction popfn;
+	PopulateTCCEFunction postfn;
 	void * image;
 
 	TCELinkage init;  //called the very first run
@@ -70,7 +71,7 @@ struct TCCEngine
 
 
 //will not dup the "attachedfiles" you need to dup it or not delete it.
-TCCEngine * TCCECreate( const char * tccfile, const char ** attachedfiles, int attachecount, PopulateTCCEFunction  popfn, void * cid );
+TCCEngine * TCCECreate( const char * tccfile, const char ** attachedfiles, int attachecount, PopulateTCCEFunction  popfn, PopulateTCCEFunction  postfn, void * cid );
 
 int TCCECheck( TCCEngine * tce, int first ); //returns 1 if re-compiling good. 0 if nothing was done.
 void TCCSetDefine( TCCEngine * tce, const char * symname, const char * sym );

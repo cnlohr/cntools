@@ -27,7 +27,7 @@
 	This file may also be licensed under the MIT/x11 license if you wish.
 */
 
-#include "tcc/libtcc.h"
+#include <libtcc.h>
 #include "tccengine.h"
 #include "os_generic.h"
 #include <string.h>
@@ -37,7 +37,7 @@
 static og_mutex_t TCCMutex;
 
 
-TCCEngine * TCCECreate( const char * tccfile, const char ** attachedfiles, int attachedcount, PopulateTCCEFunction  popfn, void * cid )
+TCCEngine * TCCECreate( const char * tccfile, const char ** attachedfiles, int attachedcount, PopulateTCCEFunction  popfn, PopulateTCCEFunction  postfn, void * cid )
 {
 	if( !TCCMutex ) TCCMutex = OGCreateMutex();
 	OGLockMutex( TCCMutex );
@@ -47,6 +47,7 @@ TCCEngine * TCCECreate( const char * tccfile, const char ** attachedfiles, int a
 	memset( ret, 0, sizeof( TCCEngine ) );
 	ret->filename = strdup( tccfile );
 	ret->popfn = popfn;
+	ret->postfn = postfn;
 	ret->cid = cid;
 
 
@@ -145,7 +146,7 @@ int TCCECheck( TCCEngine * tce, int first )
 	tcc_add_include_path( tce->state, "tcc/include_tcc/include" );
 	tcc_add_include_path( tce->state, "." );
 	tcc_define_symbol( tce->state, "TCC", 0 );
-	tcc_set_options( tce->state, "-nostdlib" );
+	tcc_set_options( tce->state, "-nostdlib -rdynamic" );
 
 #ifdef WIN32
 	tcc_define_symbol( tce->state, "WIN32", "1" );
@@ -168,6 +169,7 @@ int TCCECheck( TCCEngine * tce, int first )
 #endif
 #endif
 	r = tcc_relocate(tce->state, NULL);
+
 	if (r == -1)
 	{
 		fprintf( stderr, "TCC Reallocation error." );
@@ -186,6 +188,7 @@ int TCCECheck( TCCEngine * tce, int first )
 	void * backupimage = tce->image;
 	tce->image = malloc(r);
 	tcc_relocate( tce->state, tce->image );
+	if( tce->postfn ) tce->postfn( tce );
 	if( backuptcc )
 		tcc_delete( backuptcc );
 
