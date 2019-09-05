@@ -16,7 +16,18 @@ TCCEngine * e;
 
 int ecaller()
 {
-	if( e->update ) e->update( e->cid );
+	double start = OGGetAbsoluteTime();
+	int k = tcccrash_checkpoint();
+	if( !k )
+		if( e->update ) e->update( e->cid );
+	printf( "Total time: %f\n", OGGetAbsoluteTime() - start );
+	return 0;
+}
+
+void PostFn( TCCEngine * tce )
+{
+	printf( "POST\n" );
+	tcccrash_symtcc( tce->filename, tce->state );
 }
 
 int main()
@@ -25,30 +36,9 @@ int main()
 
 	tcccrash_install();
 
-
-	e = TCCECreate( "example_script.c", 0, 0, PopFn, tcceb );
+	e = TCCECreate( "example_script.c", 0, 0, PopFn, PostFn, tcceb );
 	printf( "Created\n" );
 	int i;
-
-	char ** n;
-	void ** v;
-	int ** f;
-	int r = tcc_get_all_symbols( e->state, &n, &v, &f );
-	int k;
-	printf( "RET: %d\n", r );
-	for( k = 0; k < r; k++ )
-	{
-		printf( "R: %p %d %s\n", v[k], f[k], n[k] );
-		tcccrash_syminfo * symadd = malloc( sizeof( tcccrash_syminfo ) );
-		symadd->tag = 1;
-		symadd->name = strdup( n[k] );
-		symadd->path = ".";
-		symadd->size = 1024; //XXX TODO
-		symadd->address = v[k];
-		tcccrash_symset( e->state, symadd );
-		printf( "OK\n" );
-	}
-
 	printf( "Starting\n" );
 	//gettimeofday
 
@@ -56,14 +46,7 @@ int main()
 	while(1)
 	{
 		TCCECheck( e, 0 );
-		printf( "CPIN\n" );
-		int k = tcccrash_checkpoint();
-		printf( "K: %d\n", k );
-		if( k == 11 ) i = 0;
-		printf( "DOLOOP [%p] [%p]\n", &main, &ecaller );
 		ecaller();
-		printf( "DONE %p\n", &main );
-		printf( "DONE2\n" );
 		OGUSleep( 100000 );
 	}
 }

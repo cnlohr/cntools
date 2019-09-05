@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 #include <setjmp.h>
+#include "tcc/libtcc.h"
 
 //Things this needs to do:
 //1: Provide a "checkpoint" for caught system exceptions
@@ -39,12 +40,18 @@ typedef struct tcccrashcheckpoint_t
 	uint8_t * signalstack; //Not used in windows? Also, unused in non-root instances.
 } tcccrashcheckpoint;
 
+
+#ifndef LIBTCC_H
+typedef struct TCCState TCCState;
+#endif
+
+
 //TCCCrash will handle deleting the pointer from here if need be.
 tcccrashcheckpoint * tcccrash_getcheckpoint();
 void tcccrash_symset( void * tag, tcccrash_syminfo * symadd );
 void tcccrash_deltag( void * tag );
 tcccrash_syminfo * tcccrash_symget( intptr_t address );
-
+void tcccrash_symtcc( const char * file, TCCState * tcc );
 
 #endif
 

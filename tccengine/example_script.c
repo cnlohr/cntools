@@ -13,7 +13,6 @@ int inner2()
 {
 	if( k % 10 == 9 )
 	{
-		inner2();
 		char * v = 0;
 		*v = 5;
 	}
@@ -53,7 +52,7 @@ int stop( struct ScriptStructure * cid )
 int update( struct ScriptStructure * cid )
 {
 	inner();
-	printf( "Update: %d %f %p %p %pEND:%p\n", cid->compiles, OGGetAbsoluteTime(), &update, &inner, &inner2,&init );
+	printf( "Update: %d %f\n", cid->compiles, OGGetAbsoluteTime() );
 }
 
 

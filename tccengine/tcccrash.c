@@ -1,6 +1,9 @@
 #include "tcccrash.h"
 #include <stdio.h>
 
+// Don't forget to compile with -rdynamic.
+//
+
 //XXX TODO: Windows support untested.
 //XXX TODO: have some mechanism/flag to say "if this thread crashes, just kill it but don't exit the program
 //XXX TODO: can we find a way we don't have to copy the symbol names and paths?
@@ -9,7 +12,7 @@
 #define CNRBTREE_IMPLEMENTATION
 #endif
 #include <cnrbtree.h>
-
+#include "symbol_enumerator.h"
 
 #define CRASHDUMPSTACKSIZE 8192
 #define CRASHDUMPBUFFER 8192
@@ -78,7 +81,7 @@ LONG WINAPI windows_exception_handler(EXCEPTION_POINTERS * ExceptionInfo)
 		struct SymbolListElement * sel = GetSymbolFromAddress( pl );
 		if( sel )
 		{
-			stp += sprintf( stp, "[%p] %s:%s(+0x%02x)\n", (void*)pl, sel->path, sel->name, (int)(pl-sel->size) );
+			stp += sprintf( stp, "[%p] %s : %s(+0x%02x)\n", (void*)pl, sel->path, sel->name, (int)(pl-sel->size) );
 		}
 		else
 		{
@@ -94,31 +97,12 @@ LONG WINAPI windows_exception_handler(EXCEPTION_POINTERS * ExceptionInfo)
 	return EXCEPTION_EXECUTE_HANDLER;  //EXCEPTION_CONTINUE_EXECUTION
 }
 
-int CrashSymEnumeratorCallback( const char * path, const char * name, void * location, long size )
-{
-	struct tcccrash_syminfo * si = malloc( sizeof( struct tcccrash_syminfo ) );
-	si->tag = 0;
-	si->name = strdup( name );
-	si->path = strdup( path );
-	si->address = location;
-	si->size = size;
-	tcccrash_symset( 0, si );
-	return 0;
-}
-
-static void EnumerateSymbols()
-{
-	int r = EnumerateSymbols( CrashSymEnumeratorCallback );
-	if( r != 0 )
-	{
-		fprintf( stderr, "EnumerateSymbols error = %d\n", r );
-	}
-}
 
 static void SetupCrashHandler()
 {
 	SetUnhandledExceptionFilter( windows_exception_handler );
 }
+
 
 #else
 
@@ -131,22 +115,6 @@ static pthread_key_t tlskey;
 #define deletekey() pthread_key_delete(tlskey)
 #define readkey     (tcccrashcheckpoint*)pthread_getspecific(tlskey)
 #define setkey(x)   pthread_setspecific(tlskey, (void*)x) 
-
-
-static void EnumerateSymbols()
-{
-#if 0
-typedef struct tcccrash_syminfo_t
-{
-	void  * tag;
-	char * name;
-	char * path;
-	intptr_t address;
-	int size;
-} tcccrash_syminfo;
-#endif
-}
-
 
 int tccbacktrace(void **buffer, int size, void * specbp) {
     extern uint64_t *__libc_stack_end;
@@ -176,7 +144,22 @@ int tccbacktrace(void **buffer, int size, void * specbp) {
 void sighandler(int sig,  siginfo_t *info, struct sigcontext ctx)
 {
 	//Avoid use of heap here, minimize stack use, too.
-	printf( "**CRASH sighandler(%d)**\n", sig );
+	static const char * thiscrash;
+	thiscrash = "unknown";
+	switch( sig )
+	{
+		case SIGSEGV: thiscrash = "SIGSEGV"; break;
+		case SIGABRT: thiscrash = "SIGABRT"; break;
+		case SIGFPE: thiscrash = "SIGFPE"; break;
+		case SIGILL: thiscrash = "SIGILL"; break;
+		case SIGALRM: thiscrash = "SIGALRM"; break;
+#ifdef SIGBUS
+		case SIGBUS: thiscrash = "SIGBUS"; break;
+#endif
+	}
+
+
+	printf( "**CRASH sighandler(%s) in ", thiscrash );
 	tcccrashcheckpoint * cp = readkey;
 	if( !cp ) cp = &scratchcp;
 	cp->did_crash = sig;
@@ -211,25 +194,26 @@ void sighandler(int sig,  siginfo_t *info, struct sigcontext ctx)
 	sel = tcccrash_symget( ip );
 	if( sel )
 	{
-		stp += sprintf( stp, "EIP: %p: %s:%s(+0x%02x)\n", (void*)ip, sel->path, sel->name, (int)(ip - sel->address) );
-		puts( stp );
+		stp += sprintf( stp, "EIP: %p: %s : %s(+0x%02x)\n", (void*)ip, sel->path, sel->name, (int)(ip - sel->address) );
+		printf( "%s**\n", sel->name );
 	}
 	else
 	{
 		stp += sprintf( stp, "[%p]\n", (void*)ip );
+		printf( "%p**\n", (void*)ip );
 	}
 
 	stp += sprintf( stp, "==========================================\n" );
 
 	//int btl = backtrace( (void**)btrace, MAXBTDEPTH );
-	int btl = tccbacktrace((void**)btrace, MAXBTDEPTH, ctx.rsp );
+	int btl = tccbacktrace((void**)btrace, MAXBTDEPTH, (void*)ctx.rsp );
 	for( i = 0; i < btl; i++ )
 	{
 		sel = tcccrash_symget( btrace[i] );
 		ip = btrace[i];
 		if( sel )
 		{
-			stp += sprintf( stp, "[%p] %s:%s(+0x%02x)\n", (void*)ip, sel->path, sel->name, (int)(ip-sel->address) );
+			stp += sprintf( stp, "[%p] %s : %s(+0x%02x)\n", (void*)ip, sel->path, sel->name, (int)(ip-sel->address) );
 		}
 		else
 		{
@@ -242,7 +226,6 @@ void sighandler(int sig,  siginfo_t *info, struct sigcontext ctx)
 	//sprintf( stp, "si_band = %d\n", si->si_band );
 
 	printf( "%s", cp->lastcrash );
-	printf( "Returning %d\n", cp->can_jump );
 	if( cp->can_jump ) siglongjmp( cp->jmpbuf, sig );
 	printf( "Untracked thread crashed.\n" );
 	puts( cp->lastcrash );
@@ -269,14 +252,14 @@ static void SetupCrashHandler()
 	sigaltstack( &ss, 0);
 
 
-    sa.sa_flags   = SA_RESTART | SA_SIGINFO | SA_ONSTACK;
-    sigaction(SIGSEGV, &sa, NULL);
-    sigaction(SIGABRT, &sa, NULL);
-    sigaction(SIGFPE, &sa, NULL);
-    sigaction(SIGILL, &sa, NULL);
+	sa.sa_flags   = SA_RESTART | SA_SIGINFO | SA_ONSTACK;
+	sigaction(SIGSEGV, &sa, NULL);
+	sigaction(SIGABRT, &sa, NULL);
+	sigaction(SIGFPE, &sa, NULL);
+	sigaction(SIGILL, &sa, NULL);
 	sigaction(SIGALRM, &sa, NULL); //Maybe have this to watchdog tcc tasks?
 #ifdef SIGBUS
-    sigaction(SIGBUS, &sa, NULL);
+	sigaction(SIGBUS, &sa, NULL);
 #endif
 }
 
@@ -295,14 +278,27 @@ static void SetupCrashHandler()
 
 static void setup_symbols();
 
+static int TCCCrashSymEnumeratorCallback( const char * path, const char * name, void * location, long size )
+{
+	tcccrash_syminfo * sn = malloc( sizeof( tcccrash_syminfo ) );
+	memset( sn, 0, sizeof( *sn ) );
+	sn->name = strdup( name );
+	sn->path = strdup( path );
+	sn->tag = 0;
+	sn->address = (intptr_t)location;
+	sn->size = size;
+	tcccrash_symset( 0, sn );
+	return 0;
+}
+
 
 void tcccrash_install()
 {
 	scratchcp.signalstack = malloc( CRASHDUMPSTACKSIZE );
 	setupkey();
-	EnumerateSymbols();
 	SetupCrashHandler();
 	setup_symbols();
+	EnumerateSymbols( TCCCrashSymEnumeratorCallback );
 
 	//For untracked threads.
 	scratchcp.lastcrash = malloc( CRASHDUMPBUFFER );
@@ -380,11 +376,11 @@ void tcccrash_symset( void * tag, tcccrash_syminfo * symadd )
 		tagptr = cnrbtree_ptrsimi_create();
 		RBA( symroot, tag ) = tagptr;
 	}
-	tcccrash_syminfo * cs = RBA( tagptr, symadd->address );
+	tcccrash_syminfo * cs = RBA( tagptr, (void*)symadd->address );
 	if( !cs ) cs = malloc( sizeof( *cs ) );
 	memcpy( cs, symadd, sizeof( *cs ) );
 	cs->tag = tag;
-	RBA( tagptr, symadd->address ) = cs;
+	RBA( tagptr, (void*)symadd->address ) = cs;
 }
 
 void tcccrash_deltag( void * tag )
@@ -412,6 +408,35 @@ tcccrash_syminfo * tcccrash_symget( intptr_t address )
 	return ret;
 }
 
+static tcccrash_syminfo * dupsym( const char * name, const char * path )
+{
+	tcccrash_syminfo * ret = malloc( sizeof( tcccrash_syminfo ) );
+	memset( ret, 0, sizeof( *ret ) );
+	ret->name = strdup( name );
+	ret->path = strdup( path );
+	return ret;
+}
+
+#include <tcc.h>
+
+void tcccrash_symtcc( const char * file, TCCState * state )
+{
+	Section * symtab = state->symtab;
+	Section * hs = symtab->hash;
+	int nbuckets = ((int *)hs->data)[0]; //XXX should this be [1]
+	int i;
+	for( i = 0; i < nbuckets; i++ )
+	{
+		int sym_index = i;
+		ElfW(Sym) * sym = &((ElfW(Sym) *)symtab->data)[sym_index];
+		const char * name1 = (char *) symtab->link->data + sym->st_name;
+		tcccrash_syminfo * sn = dupsym( name1, file );
+		sn->tag = state;
+		sn->address = sym->st_value;
+		sn->size = sym->st_size;
+		tcccrash_symset( state, sn );
+	}
+}
 
 
 
