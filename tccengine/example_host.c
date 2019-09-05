@@ -26,7 +26,8 @@ int ecaller()
 
 void PostFn( TCCEngine * tce )
 {
-	printf( "POST\n" );
+	printf( "POST %p %p\n", tce->state, tce->backuptcc );
+	if( tce->backuptcc ) tcccrash_deltag( tce->backuptcc );
 	tcccrash_symtcc( tce->filename, tce->state );
 }
 
