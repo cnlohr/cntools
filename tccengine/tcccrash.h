@@ -22,10 +22,10 @@ void tcccrash_closethread();
 
 typedef struct tcccrash_syminfo_t
 {
-	void  * tag;
+	intptr_t tag;
 	char * name;
 	char * path;
-	void * address;
+	intptr_t address;
 	int size;
 } tcccrash_syminfo;
 
@@ -48,10 +48,10 @@ typedef struct TCCState TCCState;
 
 //TCCCrash will handle deleting the pointer from here if need be.
 tcccrashcheckpoint * tcccrash_getcheckpoint();
-void tcccrash_symset( void * tag, tcccrash_syminfo * symadd );
-void tcccrash_deltag( void * tag );
-tcccrash_syminfo * tcccrash_symget( void * address );
-void * tcccrash_symaddr( void * tag, const char * symbol );
+void tcccrash_symset( intptr_t tag, tcccrash_syminfo * symadd );
+void tcccrash_deltag( intptr_t tag );
+tcccrash_syminfo * tcccrash_symget( intptr_t address );
+void * tcccrash_symaddr( intptr_t tag, const char * symbol );
 void tcccrash_symtcc( const char * file, TCCState * tcc );
 
 #endif

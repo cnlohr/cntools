@@ -1,4 +1,5 @@
 #include "tcccrash.h"
+#include <os_generic.h>
 #include <stdio.h>
 
 // Don't forget to compile with -rdynamic.
@@ -18,17 +19,15 @@
 #define CRASHDUMPBUFFER 8192
 #define MAXBTDEPTH 64
 
+static og_tls_t threadcheck;
+
 static tcccrashcheckpoint scratchcp;
 
 #if defined( WIN32 ) || defined( WINDOWS ) || defined( USE_WINDOWS ) || defined( _WIN32 )
 
 #include <windows.h>
 #define USE_WINDOWS
-static DWORD tlskey;
-#define setupkey()  tlskey = TlsAlloc();
-#define deletekey() TlsFree( tlskey );
-#define readkey     (tcccrashcheckpoint*)TlsGetValue( tlskey )
-#define setkey(x)   TlsSetValue( tlskey, (void*)x )
+
 
 LONG WINAPI windows_exception_handler(EXCEPTION_POINTERS * ExceptionInfo)
 {
@@ -36,7 +35,7 @@ LONG WINAPI windows_exception_handler(EXCEPTION_POINTERS * ExceptionInfo)
 
 	//Avoid use of heap here.
 	printf( "**CRASH**\n" );
-	tcccrashcheckpoint * cp = readkey;
+	tcccrashcheckpoint * cp = OGGetTLS( threadcheck );
 	if( !cp ) cp = &scratchcp;
 
 	char * stp;
@@ -110,12 +109,6 @@ static void SetupCrashHandler()
 #include <signal.h>
 #include <execinfo.h>
 
-static pthread_key_t tlskey;
-#define setupkey()  (void) pthread_key_create(&tlskey, NULL)
-#define deletekey() pthread_key_delete(tlskey)
-#define readkey     (tcccrashcheckpoint*)pthread_getspecific(tlskey)
-#define setkey(x)   pthread_setspecific(tlskey, (void*)x) 
-
 int tccbacktrace(void **buffer, int size, void * specbp) {
     extern uint64_t *__libc_stack_end;
     uint64_t **p, *bp, *frame;
@@ -160,7 +153,7 @@ void sighandler(int sig,  siginfo_t *info, struct sigcontext ctx)
 
 
 	printf( "**CRASH sighandler(%s) in ", thiscrash );
-	tcccrashcheckpoint * cp = readkey;
+	tcccrashcheckpoint * cp = OGGetTLS( threadcheck );
 	if( !cp ) cp = &scratchcp;
 	cp->did_crash = sig;
 	tcccrash_syminfo * sel;
@@ -184,11 +177,11 @@ void sighandler(int sig,  siginfo_t *info, struct sigcontext ctx)
 
 	//https://www.linuxjournal.com/files/linuxjournal.com/linuxjournal/articles/063/6391/6391l2.html
 //	printf( "CTX: %p\n", ctx.rbp );
-	void * ip;
+	intptr_t ip;
 	#ifdef __i386__
-	ip = (void*)ctx.oldmask; //not eip - not sure why
+	ip = ctx.oldmask; //not eip - not sure why
 	#else
-	ip = (void*)ctx.oldmask; //not rip - not sure why
+	ip = ctx.oldmask; //not rip - not sure why
 	#endif
 
 	sel = tcccrash_symget( ip );
@@ -203,14 +196,31 @@ void sighandler(int sig,  siginfo_t *info, struct sigcontext ctx)
 		printf( "%p**\n", (void*)ip );
 	}
 
+
+#if 0
+# ifdef __i386__
+	stp += sprintf( stp, "edi: %08x esi: %08x ebp:    %08x esp: %08x ebx: %08x\n", ctx.edi, ctx.esi, ctx.ebp, ctx.esp, ctx.ebx );
+	stp += sprintf( stp, "edx: %08x ecx: %08x trapno: %08x err: %08x eip: %08x\n", ctx.edx, ctx.ecx, ctx.trapno, ctx.err, ctx.eip );
+	stp += sprintf( stp, "esp_at_signal: %08x cr2:    %08x\n", ctx.esp_at_signal, ctx.cr2 );
+#else
+	stp += sprintf( stp, "r8  %016lx r9  %016lx r10 %016lx\n", ctx.r8, ctx.r9, ctx.r10 );
+	stp += sprintf( stp, "r11 %016lx r12 %016lx r13 %016lx\n", ctx.r11, ctx.r12, ctx.r13 );
+	stp += sprintf( stp, "r14 %016lx r15 %016lx\n", ctx.r14, ctx.r15 );
+	stp += sprintf( stp, "rdi %016lx rsi %016lx rbp %016lx\n", ctx.rdi, ctx.rsi, ctx.rbp );
+	stp += sprintf( stp, "rbx %016lx rdx %016lx rax %016lx\n", ctx.rbx, ctx.rdx, ctx.rax );
+	stp += sprintf( stp, "rcx %016lx rsp %016lx rip %016lx\n", ctx.rcx, ctx.rsp, ctx.rip );
+	stp += sprintf( stp, "eflags %016lx err %016lx cr2 %016lx\n", ctx.eflags, ctx.err, ctx.cr2 );
+	stp += sprintf( stp, "trapno %016lx oldmask %016lx\n", ctx.trapno, ctx.oldmask );
+#endif
+#endif
 	stp += sprintf( stp, "==========================================\n" );
 
 	//int btl = backtrace( (void**)btrace, MAXBTDEPTH );
 	int btl = tccbacktrace((void**)btrace, MAXBTDEPTH, (void*)ctx.rsp );
 	for( i = 0; i < btl; i++ )
 	{
-		sel = tcccrash_symget( btrace[i] );
-		ip = btrace[i];
+		sel = tcccrash_symget( (intptr_t)btrace[i] );
+		ip = (intptr_t)btrace[i];
 		if( sel )
 		{
 			stp += sprintf( stp, "[%p] %s : %s(+0x%02x)\n", (void*)ip, sel->path, sel->name, (int)(intptr_t)(ip-sel->address) );
@@ -267,15 +277,6 @@ static void SetupCrashHandler()
 #endif
 
 
-
-
-
-
-
-
-
-
-
 static void setup_symbols();
 
 static int TCCCrashSymEnumeratorCallback( const char * path, const char * name, void * location, long size )
@@ -285,7 +286,7 @@ static int TCCCrashSymEnumeratorCallback( const char * path, const char * name, 
 	sn->name = strdup( name );
 	sn->path = strdup( path );
 	sn->tag = 0;
-	sn->address = (void *)location;
+	sn->address = (intptr_t)location;
 	sn->size = size;
 	tcccrash_symset( 0, sn );
 	return 0;
@@ -295,7 +296,7 @@ static int TCCCrashSymEnumeratorCallback( const char * path, const char * name, 
 void tcccrash_install()
 {
 	scratchcp.signalstack = malloc( CRASHDUMPSTACKSIZE );
-	setupkey();
+	threadcheck = OGCreateTLS();
 	SetupCrashHandler();
 	setup_symbols();
 	EnumerateSymbols( TCCCrashSymEnumeratorCallback );
@@ -307,17 +308,17 @@ void tcccrash_install()
 
 void tcccrash_uninstall()
 {
-	deletekey();
+	OGDeleteTLS( threadcheck );
 }
 char * tcccrash_getcrash()
 {
-	tcccrashcheckpoint * cp = (tcccrashcheckpoint *)readkey;
+	tcccrashcheckpoint * cp = (tcccrashcheckpoint *)OGGetTLS( threadcheck );
 	return cp?cp->lastcrash:0;
 }
 
 void tcccrash_closethread()
 {
-	tcccrashcheckpoint * cp = (tcccrashcheckpoint *)readkey;
+	tcccrashcheckpoint * cp = (tcccrashcheckpoint *)OGGetTLS( threadcheck );
 	if( cp )
 	{
 		if( cp->lastcrash ) free( cp->lastcrash );
@@ -327,7 +328,7 @@ void tcccrash_closethread()
 
 tcccrashcheckpoint * tcccrash_getcheckpoint()
 {
-	tcccrashcheckpoint * cp = (tcccrashcheckpoint *)readkey;
+	tcccrashcheckpoint * cp = (tcccrashcheckpoint *)OGGetTLS( threadcheck );
 	if( cp == 0 )
 	{
 		cp = malloc( sizeof( tcccrashcheckpoint ) );
@@ -335,14 +336,14 @@ tcccrashcheckpoint * tcccrash_getcheckpoint()
 		cp->lastcrash = malloc( CRASHDUMPBUFFER );
 		cp->btrace = malloc( sizeof(void*) * MAXBTDEPTH );
 		cp->can_jump = 1;
-		setkey( cp );
+		OGSetTLS( threadcheck, cp );
 	}
 	return cp;
 }
 
 
 typedef tcccrash_syminfo * simi;
-typedef void * ptr;
+typedef intptr_t ptr;
 
 #define delsymi( key, data ) \
 	if( data ) { \
@@ -373,7 +374,7 @@ static void setup_symbols()
 	symroot_name = cnrbtree_ptrstrsimi_create();
 }
 
-void tcccrash_symset( void * tag, tcccrash_syminfo * symadd )
+void tcccrash_symset( intptr_t tag, tcccrash_syminfo * symadd )
 {
 	ptrsimi tagptr = RBA( symroot, tag );
 	strsimi tagptr_name = RBA( symroot_name, tag );
@@ -384,32 +385,31 @@ void tcccrash_symset( void * tag, tcccrash_syminfo * symadd )
 		tagptr_name = cnrbtree_strsimi_create();
 		RBA( symroot_name, tag ) = tagptr_name;
 	}
-	tcccrash_syminfo * cs = RBA( tagptr, (void*)symadd->address );
+	tcccrash_syminfo * cs = RBA( tagptr, symadd->address );
 	if( !cs ) cs = malloc( sizeof( *cs ) );
 	memcpy( cs, symadd, sizeof( *cs ) );
 	cs->tag = tag;
-	printf( "%p = %s\n", symadd->address, symadd->name );
-	RBA( tagptr, (void*)symadd->address ) = cs;
+	RBA( tagptr, symadd->address ) = cs;
 	RBA( tagptr_name, symadd->name ) = cs;
 }
 
-void tcccrash_deltag( void * tag )
+void tcccrash_deltag( intptr_t tag )
 {
 	cnrbtree_ptrptrsimi_delete( symroot, tag );
 	cnrbtree_ptrstrsimi_delete( symroot_name, tag );
 }
 
-tcccrash_syminfo * tcccrash_symget( void * address )
+tcccrash_syminfo * tcccrash_symget( intptr_t address )
 {
 	tcccrash_syminfo * ret = 0;
 	intptr_t mindiff = 0;
 	RBFOREACH( ptrptrsimi, symroot, i )
 	{
-		cnrbtree_ptrsimi_node * n = cnrbtree_ptrsimi_get2( i->data, (void*)address, 1 );
+		cnrbtree_ptrsimi_node * n = cnrbtree_ptrsimi_get2( i->data, address, 1 );
 		if( n->data->address > address )
 			n = (void*)cnrbtree_generic_prev( (void*)n );
 		if( !n ) continue;
-		intptr_t diff = (intptr_t)((char*)address - (char*)n->data->address);
+		intptr_t diff = address - n->data->address;
 		if( mindiff == 0 || ( diff < mindiff && diff < n->data->size + 16 ) )
 		{
 			ret = n->data;
@@ -434,7 +434,7 @@ void tcccrash_symtcc( const char * file, TCCState * state )
 {
 	Section * symtab = state->symtab;
 	Section * hs = symtab->hash;
-	int nbuckets = ((int *)hs->data)[0]; //XXX should this be [1]
+	int nbuckets = ((int *)hs->data)[1];
 	int i;
 	for( i = 0; i < nbuckets; i++ )
 	{
@@ -442,14 +442,14 @@ void tcccrash_symtcc( const char * file, TCCState * state )
 		ElfW(Sym) * sym = &((ElfW(Sym) *)symtab->data)[sym_index];
 		const char * name1 = (char *) symtab->link->data + sym->st_name;
 		tcccrash_syminfo * sn = dupsym( name1, file );
-		sn->tag = state;
-		sn->address = (void*)sym->st_value;
+		sn->tag = (intptr_t) state;
+		sn->address = sym->st_value;
 		sn->size = sym->st_size;
-		tcccrash_symset( state, sn );
+		tcccrash_symset( (intptr_t)state, sn );
 	}
 }
 
-void * tcccrash_symaddr( void * tag, const char * symbol )
+void * tcccrash_symaddr( intptr_t tag, const char * symbol )
 {
 	cnrbtree_ptrstrsimi_node * nrt = cnrbtree_ptrstrsimi_get( symroot_name, tag  );
 	if( !nrt ) return 0;
