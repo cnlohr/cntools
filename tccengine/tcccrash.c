@@ -109,18 +109,16 @@ static void SetupCrashHandler()
 #include <signal.h>
 #include <execinfo.h>
 
+//Backtrace code closely modeled after the code here:
+// https://stackoverflow.com/questions/47609816/get-backtrace-under-tiny-c
+// Just FYI you can get BP from "Here" with:
+//		asm ("mov %%rbp, %0;" : "=r" (bp));
+
 int tccbacktrace(void **buffer, int size, void * specbp) {
-    extern uint64_t *__libc_stack_end;
-    uint64_t **p, *bp, *frame;
-    if( !specbp )
-	{
-		asm ("mov %%rbp, %0;" : "=r" (bp));
-	}
-	else
-	{
-		bp = specbp;
-	}		
-    p = (uint64_t**) bp;
+    extern intptr_t *__libc_stack_end;
+    intptr_t **p, *bp, *frame;
+	bp = specbp;
+    p = (intptr_t**) bp;
     int i = 0;
     while (i < size) {
         frame = p[0];
@@ -128,8 +126,7 @@ int tccbacktrace(void **buffer, int size, void * specbp) {
             return i;
         }
         buffer[i++] = p[1];
-
-        p = (uint64_t**) frame;
+        p = (intptr_t**) frame;
     }
     return i;
 }
@@ -162,21 +159,7 @@ void sighandler(int sig,  siginfo_t *info, struct sigcontext ctx)
 	void ** btrace = cp->btrace;
 	int i;
 
-
-#if 0 //If we were a sig_action (but we're not)
-	sprintf( stp, "si_signo = %d\n", si->si_signo );
-	sprintf( stp, "si_code = %d\n", si->si_code );
-	sprintf( stp, "si_value = %p\n", si->si_value.sival_ptr );
-	sprintf( stp, "si_errno = %d\n", si->si_errno );
-	sprintf( stp, "si_pid = %d\n", si->si_pid );
-	sprintf( stp, "si_uid = %d\n", si->si_uid );
-	sprintf( stp, "si_addr = %p\n", si->si_addr );
-	tcccrash_symget( si->si_addr,  &symadd )
-	sprintf( stp, "  %p: %s:%s(+0x%02x)\n", si->si_addr, symadd->name, symadd->path, symadd->address - si->si_addr );
-#endif
-
 	//https://www.linuxjournal.com/files/linuxjournal.com/linuxjournal/articles/063/6391/6391l2.html
-//	printf( "CTX: %p\n", ctx.rbp );
 	intptr_t ip;
 	#ifdef __i386__
 	ip = ctx.oldmask; //not eip - not sure why
@@ -187,7 +170,7 @@ void sighandler(int sig,  siginfo_t *info, struct sigcontext ctx)
 	sel = tcccrash_symget( ip );
 	if( sel )
 	{
-		stp += sprintf( stp, "EIP: %p: %s : %s(+0x%02x)\n", (void*)ip, sel->path, sel->name, (int)(intptr_t)(ip - sel->address) );
+		stp += sprintf( stp, "[%p] %s : %s(+0x%02x)\n", (void*)ip, sel->path, sel->name, (int)(intptr_t)(ip - sel->address) );
 		printf( "%s**\n", sel->name );
 	}
 	else
@@ -287,6 +270,7 @@ static int TCCCrashSymEnumeratorCallback( const char * path, const char * name, 
 	sn->path = strdup( path );
 	sn->tag = 0;
 	sn->address = (intptr_t)location;
+	printf( "%s:%p\n", name, location );
 	sn->size = size;
 	tcccrash_symset( 0, sn );
 	return 0;

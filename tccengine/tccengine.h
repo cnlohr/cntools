@@ -65,8 +65,9 @@ struct TCCEngine
 	TCELinkage init;  //called the very first run
 	TCELinkage start; //called any time the script is loaded/reloaded
 	TCELinkage stop;  //called any time the script is unloaded (For reloading)
+#ifndef NOTCCUPDATE
 	TCELinkage update;//called every frame.
-
+#endif
 	void * cid;
 };
 

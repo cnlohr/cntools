@@ -1,6 +1,7 @@
 /*
-	Copyright (c) 2014-2018 <>< Charles Lohr
-	All rights reserved.
+	Copyright (c) 2014-2019 <>< Charles Lohr
+	All rights reserved.  You may license this file under the MIT/x11, NewBSD,
+		or CC0 licenses, your choice.
 
 	Redistribution and use in source and binary forms, with or without
 	modification, are permitted provided that the following conditions are met:
@@ -34,6 +35,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+//TinyCC uses a lot of global operations, we cannot multithread its operation.
 static og_mutex_t TCCMutex;
 
 
@@ -196,7 +198,9 @@ int TCCECheck( TCCEngine * tce, int first )
 	tce->stop = (TCELinkage)tcc_get_symbol(tce->state, "stop" );
 	tce->init = (TCELinkage)tcc_get_symbol(tce->state, "init" );
 	tce->start = (TCELinkage)tcc_get_symbol(tce->state, "start" );
+#ifndef NOTCCUPDATE
 	tce->update = (TCELinkage)tcc_get_symbol(tce->state, "update" );
+#endif
 
 	if( first && tce->init) { tce->init( tce->cid ); }
 

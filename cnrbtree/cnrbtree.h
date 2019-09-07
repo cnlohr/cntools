@@ -679,7 +679,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_deletebase( cnrbtree_generic_no
 		cnrbtree_##key_t##data_t##_node * ret; \
 		tmp = tree->node; \
 		int cmp; \
-		while( tmp ) \
+		while( 1 ) \
 		{ \
 			cmp = comparexy( key, tmp->key ); \
 			if( cmp < 0 ) tmpnext = tmp->left; \

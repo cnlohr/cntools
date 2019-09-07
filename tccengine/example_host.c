@@ -40,7 +40,7 @@ int main()
 	e = TCCECreate( "example_script.c", 0, 0, PopFn, PostFn, tcceb );
 	printf( "Created\n" );
 	int i;
-	printf( "Starting\n" );
+	printf( "Starting %p %p\n", main, ecaller );
 	//gettimeofday
 
 
