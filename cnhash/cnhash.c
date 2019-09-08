@@ -13,7 +13,7 @@ static const int cnhashtablesizes[] = {
 	
 	
 
-cnhashtable * CNHashGenerate( int allow_duplicates, void * opaque, cnhash_hash_function hf, cnhash_compare_function cf, cnhash_delete_function df )
+cnhashtable * CNHashGenerate( int allow_duplicates, void * opaque, cnhash_copy_key_function kf, cnhash_hash_function hf, cnhash_compare_function cf, cnhash_delete_function df )
 {
 	cnhashtable * ret = malloc( sizeof( cnhashtable ) );
 	ret->nr_elements = 0;
@@ -24,13 +24,14 @@ cnhashtable * CNHashGenerate( int allow_duplicates, void * opaque, cnhash_hash_f
 	ret->elements = malloc( bytes );
 	memset( ret->elements, 0, bytes );
 	ret->opaque = opaque;
+	ret->kf = kf;
 	ret->hf = hf;
 	ret->cf = cf;
 	ret->df = df;
 	return ret;
 }
 
-cnhashelement * CNHashInsert( cnhashtable * ht, void * key, void * data )
+cnhashelement * CNHashInsert( cnhashtable * ht, const void * key, void * data )
 {
 	if( ( ht->nr_elements + 1 ) > ( ht->array_size / 2 ) )
 	{
@@ -74,7 +75,11 @@ cnhashelement * CNHashInsert( cnhashtable * ht, void * key, void * data )
 			i = (i+1) % ht->array_size;
 		}
 	}
-	he->key = key;
+	if( ht->kf )
+		he->key = ht->kf( key );
+	else
+		he->key = (void*)key; //If no function, we assume this is a safe operation.
+
 	he->hashvalue = hash;
 	he->data = data;
 
@@ -82,7 +87,7 @@ cnhashelement * CNHashInsert( cnhashtable * ht, void * key, void * data )
 	return he;
 }
 
-cnhashelement * CNHashGet( cnhashtable * ht, void * key )
+cnhashelement * CNHashGet( cnhashtable * ht, const void * key )
 {
 	uint32_t hash = ht->hf( key, ht->opaque );
 	int i = hash % ht->array_size;
@@ -99,7 +104,7 @@ cnhashelement * CNHashGet( cnhashtable * ht, void * key )
 	return 0;
 }
 
-cnhashelement * CNHashGetMultiple( cnhashtable * ht, void * key, int * nrvalues )
+cnhashelement * CNHashGetMultiple( cnhashtable * ht, const void * key, int * nrvalues )
 {
 	*nrvalues = 0;
 	cnhashelement * ret = 0;
@@ -134,14 +139,14 @@ cnhashelement * CNHashGetMultiple( cnhashtable * ht, void * key, int * nrvalues 
 
 }
 
-void * CNHashGetValue( cnhashtable * ht, void * key )
+void * CNHashGetValue( cnhashtable * ht, const void * key )
 {
 	cnhashelement * e = CNHashGet( ht, key );
 	if( e ) return e->data;
 	else return 0;
 }
 
-void ** CNHashGetValueMultiple( cnhashtable * ht, void * key, int * nrvalues )
+void ** CNHashGetValueMultiple( cnhashtable * ht, const void * key, int * nrvalues )
 {
 	cnhashelement * r = CNHashGetMultiple( ht, key, nrvalues );
 	void ** ret = malloc( sizeof( void * ) * (*nrvalues) );
@@ -155,7 +160,7 @@ void ** CNHashGetValueMultiple( cnhashtable * ht, void * key, int * nrvalues )
 }
 
 
-void CNHashDelete( cnhashtable * ht, void * key )
+void CNHashDelete( cnhashtable * ht, const void * key )
 {
 	int as = ht->array_size;
 	int i;
@@ -210,7 +215,7 @@ void CNHashDestroy( cnhashtable * ht )
 	free( ht );
 }
 
-cnhashelement * CNHashIndex( cnhashtable * ht, void * key )
+cnhashelement * CNHashIndex( cnhashtable * ht, const void * key )
 {
 	//If get fails, insert
 	cnhashelement * ret = CNHashGet( ht, key );
@@ -218,7 +223,12 @@ cnhashelement * CNHashIndex( cnhashtable * ht, void * key )
 	return CNHashInsert( ht, key, 0 );
 }
 
-intptr_t cnhash_strhf( void * key, void * opaque )
+void *   cnhash_strkf( const void * keyin )
+{
+	return strdup( keyin );
+}
+
+intptr_t cnhash_strhf( const void * key, void * opaque )
 {
 	//SDBM (public domain) http://www.cse.yorku.ca/~oz/hash.html
 	char * str = (char*)key;
@@ -231,7 +241,7 @@ intptr_t cnhash_strhf( void * key, void * opaque )
 	return hash;
 }
 
-int      cnhash_strcf( void * key_a, void * key_b, void * opaque )
+int      cnhash_strcf( const void * key_a, const void * key_b, void * opaque )
 {
 	return strcmp( key_a, key_b );
 }
@@ -242,8 +252,7 @@ void     cnhash_strdel( void * key, void * data, void * opaque )
 	if( data ) free( data );
 }
 
-
-intptr_t cnhash_ptrhf( void * key, void * opaque )
+intptr_t cnhash_ptrhf( const void * key, void * opaque )
 {
 	if( key == 0 )
 		return 1;
@@ -251,15 +260,12 @@ intptr_t cnhash_ptrhf( void * key, void * opaque )
 		return (intptr_t)key;
 }
 
-int      cnhash_ptrcf( void * key_a, void * key_b, void * opaque )
+int      cnhash_ptrcf( const void * key_a, const void * key_b, void * opaque )
 {
 	return key_a != key_b;
 }
 
-void     cnhash_ptrdel( void * key, void * data, void * opaque )
-{
-	//No op.
-}
+
 
 
 
