@@ -152,6 +152,12 @@ void sighandler(int sig,  siginfo_t *info, struct sigcontext ctx)
 	printf( "**CRASH sighandler(%s) in ", thiscrash );
 	tcccrashcheckpoint * cp = OGGetTLS( threadcheck );
 	if( !cp ) cp = &scratchcp;
+	if( cp->in_crash_handler == 1 )
+	{
+		printf( "Double-crash. Cannot recover.\n" );
+		exit( -1 );
+	}
+	cp->in_crash_handler = 1;
 	cp->did_crash = sig;
 	tcccrash_syminfo * sel;
 	char * stp = cp->lastcrash;
@@ -219,6 +225,7 @@ void sighandler(int sig,  siginfo_t *info, struct sigcontext ctx)
 	//sprintf( stp, "si_band = %d\n", si->si_band );
 
 	printf( "%s", cp->lastcrash );
+	cp->in_crash_handler = 0;
 	if( cp->can_jump ) siglongjmp( cp->jmpbuf, sig );
 	printf( "Untracked thread crashed.\n" );
 	puts( cp->lastcrash );
@@ -351,15 +358,18 @@ CNRBTREETEMPLATE( ptr, ptrsimi, RBptrcmp, RBsptrcpy, deltree ); //defines cnrbtr
 
 static cnrbtree_ptrptrsimi * symroot;
 static cnrbtree_ptrstrsimi * symroot_name;
+static og_mutex_t            symroot_mutex;
 
 static void setup_symbols()
 {
 	symroot = cnrbtree_ptrptrsimi_create();
 	symroot_name = cnrbtree_ptrstrsimi_create();
+	symroot_mutex = OGCreateMutex();
 }
 
 void tcccrash_symset( intptr_t tag, tcccrash_syminfo * symadd )
 {
+	OGLockMutex( symroot_mutex );
 	ptrsimi tagptr = RBA( symroot, tag );
 	strsimi tagptr_name = RBA( symroot_name, tag );
 	if( !tagptr )
@@ -375,16 +385,20 @@ void tcccrash_symset( intptr_t tag, tcccrash_syminfo * symadd )
 	cs->tag = tag;
 	RBA( tagptr, symadd->address ) = cs;
 	RBA( tagptr_name, symadd->name ) = cs;
+	OGUnlockMutex( symroot_mutex );
 }
 
 void tcccrash_deltag( intptr_t tag )
 {
+	OGLockMutex( symroot_mutex );
 	cnrbtree_ptrptrsimi_delete( symroot, tag );
 	cnrbtree_ptrstrsimi_delete( symroot_name, tag );
+	OGUnlockMutex( symroot_mutex );
 }
 
 tcccrash_syminfo * tcccrash_symget( intptr_t address )
 {
+	OGLockMutex( symroot_mutex );
 	tcccrash_syminfo * ret = 0;
 	intptr_t mindiff = 0;
 	RBFOREACH( ptrptrsimi, symroot, i )
@@ -400,6 +414,7 @@ tcccrash_syminfo * tcccrash_symget( intptr_t address )
 			mindiff = diff;
 		}
 	}
+	OGUnlockMutex( symroot_mutex );
 	return ret;
 }
 
@@ -435,11 +450,16 @@ void tcccrash_symtcc( const char * file, TCCState * state )
 
 void * tcccrash_symaddr( intptr_t tag, const char * symbol )
 {
+	OGLockMutex( symroot_mutex );
 	cnrbtree_ptrstrsimi_node * nrt = cnrbtree_ptrstrsimi_get( symroot_name, tag  );
-	if( !nrt ) return 0;
+	if( !nrt ) goto fail;
 	cnrbtree_strsimi_node * n = cnrbtree_strsimi_get( nrt->data, (char*)symbol );
-	if( !n || !n->data ) return 0;
+	if( !n || !n->data ) goto fail;
+	OGUnlockMutex( symroot_mutex );
 	return (void*)n->data->address;
+fail:
+	OGUnlockMutex( symroot_mutex );
+	return 0;
 }
 
 

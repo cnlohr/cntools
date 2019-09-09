@@ -35,6 +35,7 @@ typedef struct tcccrashcheckpoint_t
 	jmp_buf jmpbuf;
 	int did_crash;
 	int can_jump;
+	int in_crash_handler;
 	char * lastcrash;
 	void ** btrace;	//Not needed in Windows?
 	uint8_t * signalstack; //Not used in windows? Also, unused in non-root instances.
