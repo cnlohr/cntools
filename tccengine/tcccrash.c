@@ -157,6 +157,7 @@ void sighandler(int sig,  siginfo_t *info, struct sigcontext ctx)
 		printf( "Double-crash. Cannot recover.\n" );
 		exit( -1 );
 	}
+
 	cp->in_crash_handler = 1;
 	cp->did_crash = sig;
 	tcccrash_syminfo * sel;
@@ -172,7 +173,7 @@ void sighandler(int sig,  siginfo_t *info, struct sigcontext ctx)
 	#else
 	ip = ctx.oldmask; //not rip - not sure why
 	#endif
-
+	printf( "%p ", (void*)ip );
 	sel = tcccrash_symget( ip );
 	if( sel )
 	{
@@ -202,29 +203,38 @@ void sighandler(int sig,  siginfo_t *info, struct sigcontext ctx)
 	stp += sprintf( stp, "trapno %016lx oldmask %016lx\n", ctx.trapno, ctx.oldmask );
 #endif
 #endif
-	stp += sprintf( stp, "==========================================\n" );
 
 	//int btl = backtrace( (void**)btrace, MAXBTDEPTH );
-	int btl = tccbacktrace((void**)btrace, MAXBTDEPTH, (void*)ctx.rsp );
+	void * rsp = (void*)ctx.rsp;
+	if( ctx.rsp == 0 )
+	{
+		printf( "No backtrace RSP.  Can't take backtrace.\n" );
+		stp += sprintf( stp, "No backtrace RSP.  Can't take backtrace.\n" );
+		goto  finishup;
+	}
+ 
+	int btl = tccbacktrace((void**)btrace, MAXBTDEPTH, rsp );
+	printf( "==========================================%d [%p]\n", btl, rsp );
+	stp += sprintf( stp, "==========================================%d [%p]\n", btl, rsp );
 	for( i = 0; i < btl; i++ )
 	{
 		sel = tcccrash_symget( (intptr_t)btrace[i] );
 		ip = (intptr_t)btrace[i];
 		if( sel )
 		{
+			printf( "[%p] %s : %s(+0x%02x)\n", (void*)ip, sel->path, sel->name, (int)(intptr_t)(ip-sel->address) );
 			stp += sprintf( stp, "[%p] %s : %s(+0x%02x)\n", (void*)ip, sel->path, sel->name, (int)(intptr_t)(ip-sel->address) );
 		}
 		else
 		{
+			printf( "[%p]\n", (void*)ip );
 			stp += sprintf( stp, "[%p]\n", (void*)ip );
 		}
 
 		if( stp - stpstart > CRASHDUMPBUFFER - 1024 ) break; //Just in case it's waaay too long
 	}
-	//sprintf( stp, "si_status = %d\n", si->si_status );
-	//sprintf( stp, "si_band = %d\n", si->si_band );
 
-	printf( "%s", cp->lastcrash );
+finishup:
 	cp->in_crash_handler = 0;
 	if( cp->can_jump ) siglongjmp( cp->jmpbuf, sig );
 	printf( "Untracked thread crashed.\n" );
