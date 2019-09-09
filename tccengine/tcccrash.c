@@ -264,13 +264,13 @@ static void setup_symbols();
 
 static int TCCCrashSymEnumeratorCallback( const char * path, const char * name, void * location, long size )
 {
+	if( !name || strlen(name) < 1 ) return 0;
 	tcccrash_syminfo * sn = malloc( sizeof( tcccrash_syminfo ) );
 	memset( sn, 0, sizeof( *sn ) );
 	sn->name = strdup( name );
 	sn->path = strdup( path );
 	sn->tag = 0;
 	sn->address = (intptr_t)location;
-	printf( "%s:%p\n", name, location );
 	sn->size = size;
 	tcccrash_symset( 0, sn );
 	return 0;

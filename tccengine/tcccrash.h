@@ -15,7 +15,7 @@
 //3: Process a crash dump.
 
 void tcccrash_install();
-int  tcccrash_checkpoint();
+//tcccrash_checkpoint returns 0 on success, nonzero on fault.
 #define  tcccrash_checkpoint() (sigsetjmp( tcccrash_getcheckpoint()->jmpbuf, -1))
 char * tcccrash_getcrash();
 void tcccrash_closethread();
