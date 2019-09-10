@@ -401,8 +401,8 @@ void tcccrash_symset( intptr_t tag, tcccrash_syminfo * symadd )
 void tcccrash_deltag( intptr_t tag )
 {
 	OGLockMutex( symroot_mutex );
-	cnrbtree_ptrptrsimi_delete( symroot, tag );
-	cnrbtree_ptrstrsimi_delete( symroot_name, tag );
+	cnrbtree_ptrptrsimi_remove( symroot, tag );
+	cnrbtree_ptrstrsimi_remove( symroot_name, tag );
 	OGUnlockMutex( symroot_mutex );
 }
 
