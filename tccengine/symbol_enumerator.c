@@ -4,7 +4,65 @@
 #if defined( WIN32 ) || defined( WINDOWS ) || defined( USE_WINDOWS ) || defined( _WIN32 )
 
 #include <windows.h>
+
+#ifdef __TINYC__
+
+
+typedef struct _SYMBOL_INFO {
+    ULONG       SizeOfStruct;
+    ULONG       TypeIndex;        // Type Index of symbol
+    ULONG64     Reserved[2];
+    ULONG       Index;
+    ULONG       Size;
+    ULONG64     ModBase;          // Base Address of module comtaining this symbol
+    ULONG       Flags;
+    ULONG64     Value;            // Value of symbol, ValuePresent should be 1
+    ULONG64     Address;          // Address of symbol including base address of module
+    ULONG       Register;         // register holding value or pointer to value
+    ULONG       Scope;            // scope of the symbol
+    ULONG       Tag;              // pdb classification
+    ULONG       NameLen;          // Actual length of name
+    ULONG       MaxNameLen;
+    CHAR        Name[1];          // Name of symbol
+} SYMBOL_INFO, *PSYMBOL_INFO;
+
+#define _In_
+#define _In_opt_
+#define IMAGEAPI __declspec( dllimport )
+typedef BOOL
+(CALLBACK *PSYM_ENUMERATESYMBOLS_CALLBACK)(
+    _In_ PSYMBOL_INFO pSymInfo,
+    _In_ ULONG SymbolSize,
+    _In_opt_ PVOID UserContext
+    );
+
+BOOL
+IMAGEAPI
+SymInitialize(
+    _In_ HANDLE hProcess,
+    _In_opt_ PCSTR UserSearchPath,
+    _In_ BOOL fInvadeProcess
+    );
+
+BOOL
+IMAGEAPI
+SymEnumSymbols(
+    _In_ HANDLE hProcess,
+    _In_ ULONG64 BaseOfDll,
+    _In_opt_ PCSTR Mask,
+    _In_ PSYM_ENUMERATESYMBOLS_CALLBACK EnumSymbolsCallback,
+    _In_opt_ PVOID UserContext
+    );
+
+BOOL
+IMAGEAPI
+SymCleanup(
+    _In_ HANDLE hProcess
+    );
+
+#else
 #include <dbghelp.h>
++#endif
 
 BOOL CALLBACK mycb(PSYMBOL_INFO pSymInfo, ULONG SymbolSize, PVOID UserContext) {
 	SymEnumeratorCallback cb = (SymEnumeratorCallback)UserContext;
