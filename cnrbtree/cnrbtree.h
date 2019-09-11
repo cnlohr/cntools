@@ -719,6 +719,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic_no
 	} \
 	CNRBTREE_TEMPLATE_DECORATOR void cnrbtree_##key_t##data_t##_destroy_node_internal( cnrbtree_##key_t##data_t##_node * node ) \
 	{\
+		if( !node ) return; \
 		deletekeyxy( node->key, node->data ); \
 		if( node->left ) cnrbtree_##key_t##data_t##_destroy_node_internal( node->left ); \
 		if( node->right ) cnrbtree_##key_t##data_t##_destroy_node_internal( node->right ); \

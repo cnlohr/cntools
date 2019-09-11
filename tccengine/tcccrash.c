@@ -39,8 +39,9 @@ LONG WINAPI windows_exception_handler(EXCEPTION_POINTERS * ExceptionInfo)
 	if( !cp ) cp = &scratchcp;
 
 	char * stp;
+	char * stpstart;
 	int i;
-	stp = cp->lastcrash;
+	stpstart = stp = cp->lastcrash;
 
 	struct ReasonTableType { int reason; const char * err; int recoverable; } reasontable[] = {
 		{ EXCEPTION_ACCESS_VIOLATION, "Access Violation", 1 },
@@ -68,30 +69,30 @@ LONG WINAPI windows_exception_handler(EXCEPTION_POINTERS * ExceptionInfo)
 	for( i = 0; reasontable[i].reason != -1 && reasontable[i].reason != ExceptionInfo->ExceptionRecord->ExceptionCode; i++ );
 	stp += sprintf( stp, "%s\n", reasontable[i].err );
 	
-	int * place = (int*)ExceptionInfo->ContextRecord->Rsp;
+	intptr_t * place = (intptr_t*)ExceptionInfo->ContextRecord->Rsp;
 	for( i = 0; i < 200; i++ )
 	{
-		int * pl = (int*)place[i];
+		intptr_t * pel = (intptr_t*)place[i];
 		if( i == 0 )
 		{
-			pl = (int*)ExceptionInfo->ContextRecord->Rip;
+			pel = (intptr_t*)ExceptionInfo->ContextRecord->Rip;
 		}
-		if( !pl ) continue;
-		struct SymbolListElement * sel = GetSymbolFromAddress( pl );
+		if( !pel ) continue;
+		tcccrash_syminfo * sel = tcccrash_symget( (intptr_t)pel );
 		if( sel )
 		{
-			stp += sprintf( stp, "[%p] %s : %s(+0x%02x)\n", (void*)pl, sel->path, sel->name, (int)(pl-sel->size) );
+			stp += sprintf( stp, "[%p] %s : %s(+0x%02x)\n", (void*)pel, sel->path, sel->name, (int)(pel-sel->size) );
 		}
 		else
 		{
-			stp += sprintf( stp, "[%16llx]\n", pl );
+			stp += sprintf( stp, "[%16llx]\n", pel );
 		}
 		if( stp - stpstart > CRASHDUMPBUFFER - 1024 ) break; //Just in case it's waaay too long
 	}
 
 	if( cp->can_jump ) longjmp( cp->jmpbuf, -1 );
 
-	printf( "Untracked thread crashed.\s" );
+	printf( "Untracked thread crashed.\n" );
 	puts( cp->lastcrash );
 	return EXCEPTION_EXECUTE_HANDLER;  //EXCEPTION_CONTINUE_EXECUTION
 }
@@ -336,7 +337,7 @@ tcccrashcheckpoint * tcccrash_getcheckpoint()
 		memset( cp, 0, sizeof( tcccrashcheckpoint ) );
 		cp->lastcrash = malloc( CRASHDUMPBUFFER );
 		cp->btrace = malloc( sizeof(void*) * MAXBTDEPTH );
-		cp->can_jump = 1;
+		cp->can_jump = 1;	//XXX TODO: Should this be 0?
 		OGSetTLS( threadcheck, cp );
 	}
 	return cp;
@@ -437,7 +438,7 @@ static tcccrash_syminfo * dupsym( const char * name, const char * path )
 	return ret;
 }
 
-#include <tcc.h>
+#include <tinycc/tcc.h>
 
 void tcccrash_symtcc( const char * file, TCCState * state )
 {

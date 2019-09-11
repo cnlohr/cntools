@@ -7,7 +7,7 @@
 
 #include <stdint.h>
 #include <setjmp.h>
-#include "tcc/libtcc.h"
+#include "libtcc/libtcc.h"
 
 //Things this needs to do:
 //1: Provide a "checkpoint" for caught system exceptions
@@ -16,7 +16,12 @@
 
 void tcccrash_install();
 //tcccrash_checkpoint returns 0 on success, nonzero on fault.
-#define  tcccrash_checkpoint() (sigsetjmp( tcccrash_getcheckpoint()->jmpbuf, -1))
+#if defined( WIN32 ) || defined( WINDOWS ) || defined( WIN64 )
+#define  tcccrash_checkpoint() ( tcccrash_getcheckpoint()->can_jump = 1, setjmp( tcccrash_getcheckpoint()->jmpbuf, -1 ) )
+#else
+#define  tcccrash_checkpoint() ( tcccrash_getcheckpoint()->can_jump = 1, sigsetjmp( tcccrash_getcheckpoint()->jmpbuf, -1 ) )
+#endif
+#define tcccrash_nullifycheckpoint() { tcccrash_getcheckpoint()->can_jump = 0; }
 char * tcccrash_getcrash();
 void tcccrash_closethread();
 
