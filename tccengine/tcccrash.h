@@ -7,7 +7,7 @@
 
 #include <stdint.h>
 #include <setjmp.h>
-#include "libtcc/libtcc.h"
+#include "tinycc/libtcc.h"
 
 //Things this needs to do:
 //1: Provide a "checkpoint" for caught system exceptions
