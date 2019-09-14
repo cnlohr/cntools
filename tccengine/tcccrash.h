@@ -17,7 +17,7 @@
 void tcccrash_install();
 //tcccrash_checkpoint returns 0 on success, nonzero on fault.
 #if defined( WIN32 ) || defined( WINDOWS ) || defined( WIN64 )
-#define  tcccrash_checkpoint() ( tcccrash_getcheckpoint()->can_jump = 1, setjmp( tcccrash_getcheckpoint()->jmpbuf, -1 ) )
+#define  tcccrash_checkpoint() ( tcccrash_getcheckpoint()->can_jump = 1, setjmp( tcccrash_getcheckpoint()->jmpbuf ) )
 #else
 #define  tcccrash_checkpoint() ( tcccrash_getcheckpoint()->can_jump = 1, sigsetjmp( tcccrash_getcheckpoint()->jmpbuf, -1 ) )
 #endif

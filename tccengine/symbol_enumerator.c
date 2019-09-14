@@ -62,7 +62,7 @@ SymCleanup(
 
 #else
 #include <dbghelp.h>
-+#endif
+#endif
 
 BOOL CALLBACK mycb(PSYMBOL_INFO pSymInfo, ULONG SymbolSize, PVOID UserContext) {
 	SymEnumeratorCallback cb = (SymEnumeratorCallback)UserContext;
