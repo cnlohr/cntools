@@ -179,7 +179,7 @@ void sighandler(int sig,  siginfo_t *info, struct sigcontext ctx)
 	if( sel )
 	{
 		stp += sprintf( stp, "[%p] %s : %s(+0x%02x)\n", (void*)ip, sel->path, sel->name, (int)(intptr_t)(ip - sel->address) );
-		printf( "%s**\n", sel->name );
+		printf( "%s(+0x%02x)**\n", sel->name, (int)(intptr_t)(ip - sel->address) );
 	}
 	else
 	{
@@ -204,16 +204,22 @@ void sighandler(int sig,  siginfo_t *info, struct sigcontext ctx)
 	stp += sprintf( stp, "trapno %016lx oldmask %016lx\n", ctx.trapno, ctx.oldmask );
 #endif
 #endif
-
+	puts( stpstart );
 	//int btl = backtrace( (void**)btrace, MAXBTDEPTH );
 	void * rsp = (void*)ctx.rsp;
-	if( ctx.rsp == 0 )
+	if( rsp < (void*)0x40000 )
+	{
+		//rsp broken.  Try RBP
+		rsp = (void*)ctx.rbp;
+	}
+	if( rsp < (void*)0x400000 )
 	{
 		printf( "No backtrace RSP.  Can't take backtrace.\n" );
 		stp += sprintf( stp, "No backtrace RSP.  Can't take backtrace.\n" );
+		exit( -1 );
 		goto  finishup;
 	}
- 
+	printf( "Backtrace RSP: %p\n", rsp ); 
 	int btl = tccbacktrace((void**)btrace, MAXBTDEPTH, rsp );
 	printf( "==========================================%d [%p]\n", btl, rsp );
 	stp += sprintf( stp, "==========================================%d [%p]\n", btl, rsp );
