@@ -54,6 +54,8 @@ typedef struct TCCState TCCState;
 
 //TCCCrash will handle deleting the pointer from here if need be.
 tcccrashcheckpoint * tcccrash_getcheckpoint();
+
+//This consumes symadd, it will handle freeing it later.
 void tcccrash_symset( intptr_t tag, tcccrash_syminfo * symadd );
 void tcccrash_deltag( intptr_t tag );
 tcccrash_syminfo * tcccrash_symget( intptr_t address );

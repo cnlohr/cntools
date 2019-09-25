@@ -370,8 +370,8 @@ CNRBTREETEMPLATE( ptr, simi, RBptrcmp, RBsptrcpy, delsymi ); //defines cnrbtree_
 CNRBTREETEMPLATE( str, simi, RBstrcmp, RBstrcpy, RBstrdel ); //defines cnrbtree_ptrptrsimi
 typedef cnrbtree_ptrsimi * ptrsimi;
 typedef cnrbtree_strsimi * strsimi;
-CNRBTREETEMPLATE( ptr, strsimi, RBptrcmp, RBsptrcpy, deltree ); //defines cnrbtree_ptrstrsimi
-CNRBTREETEMPLATE( ptr, ptrsimi, RBptrcmp, RBsptrcpy, deltree ); //defines cnrbtree_ptrptrsimi
+CNRBTREETEMPLATE( ptr, strsimi, RBptrcmp, RBsptrcpy, deltree ); //defines cnrbtree_ptrstrsimi (A tree of trees)
+CNRBTREETEMPLATE( ptr, ptrsimi, RBptrcmp, RBsptrcpy, deltree ); //defines cnrbtree_ptrptrsimi (A tree of trees)
 
 static cnrbtree_ptrptrsimi * symroot;
 static cnrbtree_ptrstrsimi * symroot_name;
@@ -384,6 +384,7 @@ static void setup_symbols()
 	symroot_mutex = OGCreateMutex();
 }
 
+//This consumes symadd, it will handle freeing it later.
 void tcccrash_symset( intptr_t tag, tcccrash_syminfo * symadd )
 {
 	OGLockMutex( symroot_mutex );
@@ -397,8 +398,8 @@ void tcccrash_symset( intptr_t tag, tcccrash_syminfo * symadd )
 		RBA( symroot_name, tag ) = tagptr_name;
 	}
 	tcccrash_syminfo * cs = RBA( tagptr, symadd->address );
-	if( !cs ) cs = malloc( sizeof( *cs ) );
-	memcpy( cs, symadd, sizeof( *cs ) );
+	if( cs ) delsymi( 0, cs );
+	cs = symadd;
 	cs->tag = tag;
 	RBA( tagptr, symadd->address ) = cs;
 	RBA( tagptr_name, symadd->name ) = cs;
