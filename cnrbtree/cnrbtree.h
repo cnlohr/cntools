@@ -359,7 +359,7 @@ CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_insert_repai
 }
 
 /////////////////EXCHANGING//////////////////
-#define CLRSBOOK
+//#define CLRSBOOK
 
 #ifdef CLRSBOOK
 
