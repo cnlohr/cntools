@@ -1,4 +1,4 @@
-//#define FULLTEST
+#define FULLTEST
 
 struct cnrbtree_generic_node_t;
 int PrintTreeRootIt( struct cnrbtree_generic_node_t * t );
@@ -80,7 +80,6 @@ int main()
 {
 #ifndef FULLTEST
 	cnrbtree_strstr * tree = cnrbtree_strstr_create();
-	printf( "%d\n", (int)strtest( "abcdefgh", "abcdefga" ) );
 
 	srand(0);
 	#define ITERATIONS 1000
@@ -142,17 +141,17 @@ int main()
 	cnrbtree_intint * tree;
 	tree = cnrbtree_intint_create();
 	srand(0);
-	#define ITERATIONS 1000
+	#define ITERATIONS 10
 	int addlist[ITERATIONS];
 	int i;
 	int j;
-	for( j = 0; j < 3000; j++ )
+	for( j = 0; j < 1; j++ )
 	{
 		for( i = 0; i < ITERATIONS; i++ )
 		{
 			PrintTree( tree->node, 0, 0 );
 	retry:
-			addlist[i] = rand();
+			addlist[i] = rand()%(ITERATIONS*10);
 		//	printf( "Adding: %d\n", (addlist[i] = rand()) );
 			if( cnrbtree_intint_get( tree, addlist[i] ) )
 			{
@@ -170,12 +169,13 @@ int main()
 			printf( "Size violation. %d\n", tree->size );
 			exit( 5 );
 		}
+		printf( "FINAL TREE BEFORE REMOVAL\n" );
 		PrintTree( tree->node, 0, 0 );
 
 		for( i = 0; i < ITERATIONS; i++ )
 		{
 			int k = addlist[i];
-		//	printf( "Deleting %d (%d)\n", k, i );
+			printf( "Deleting %d (%d)\n", k, i );
 			if( !cnrbtree_intint_get( tree, addlist[i] ) )
 			{
 				printf( "Access fault.\n" );
@@ -200,7 +200,7 @@ int main()
 
 
 
-	for( i = 0; i < 100; i++ )
+	for( i = 0; i < ITERATIONS; i++ )
 	{
 		PrintTree( tree->node, 0, 0 );
 retry2:

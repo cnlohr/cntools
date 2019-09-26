@@ -69,7 +69,7 @@
      RBDESTROY( tree );
 
   Authors:
-    <>< Charles Lohr
+    2019 <>< Charles Lohr
  
   Based on Wikipedia article on red black trees.
 
@@ -266,7 +266,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_rotateright( cnrbtree_generic_n
 	nnew->parent = p;
 }
 
-// MIT Press Introduction to Algorithms version, modified to use uncles.  Does not use recursion.
+// MIT Press Introduction to Algorithms version, modified to use uncles, also a bit rearranged as an optimization.  Does not use recursion.
 
 CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_insert_repair_tree_with_fixup( cnrbtree_generic_node * z, cnrbtree_generic * tree  )
 {
@@ -359,7 +359,13 @@ CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_insert_repai
 }
 
 /////////////////EXCHANGING//////////////////
+#define CLRSBOOK
 
+#ifdef CLRSBOOK
+
+// No copy of this function in the MIT book.
+
+#else
 
 CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_exchange_nodes_internal( cnrbtree_generic_node * n1, cnrbtree_generic_node * n )
 {
@@ -401,11 +407,234 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_exchange_nodes_internal( cnrbtr
 	if( n->left ) n->left->parent = n;
 }
 
+#endif
 
 
 /////////////////DELETION//////////////////
 
 
+#ifdef CLRSBOOK
+
+//XXX NOTE XXX: CLRSBOOK version of the delete code is much shorter, but not really written
+//the way we would want to operate, so this is INCOMPLETE and currently INCORRECT!!! Do not
+//use the following code unless you intend to work on it and fix it up.
+
+//
+// btw https://dpb.bitbucket.io/annotations-of-cormen-et-al-s-algorithm-for-a-red-black-tree-delete-and-delete-fixup-functions-only.html may help
+//
+
+//"RB-DELETE-FIXUP( T,x )"
+CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removefixup( cnrbtree_generic * T, cnrbtree_generic_node * x )
+{
+	printf( "INX: %p\n", x );
+	cnrbtree_generic_node * w;
+	//XXX Should this just be while "x->parent"
+	while( /* x != T->node */ x->parent && x->color == CNRBTREE_COLOR_BLACK )
+	{
+		if( x == x->parent->left )
+		{
+			w = x->parent->right;
+			if( w && w->color == CNRBTREE_COLOR_RED )
+			{
+				w->color = CNRBTREE_COLOR_BLACK;
+				x->parent->color = CNRBTREE_COLOR_RED;
+				cnrbtree_generic_rotateleft( x->parent );
+				w = x->parent->right;
+			}
+			if( ( !(w->left) || w->left->color == CNRBTREE_COLOR_BLACK ) && 
+				( !(w->right) || w->right->color == CNRBTREE_COLOR_BLACK ) )
+			{
+				w->color = CNRBTREE_COLOR_RED;
+				x = x->parent;
+			}
+			else
+			{
+				if( !(w->right) || w->right->color == CNRBTREE_COLOR_BLACK )
+				{
+					w->left->color = CNRBTREE_COLOR_BLACK;
+					w->color = CNRBTREE_COLOR_RED;
+					cnrbtree_generic_rotateright( w );
+					w = x->parent->right;
+				}
+				w->color = x->parent->color;
+				x->parent->color = CNRBTREE_COLOR_BLACK;
+				w->right->color = CNRBTREE_COLOR_BLACK;
+				printf( "++++L\n" );
+				cnrbtree_generic_rotateleft( x->parent );
+				break;
+			}
+		}
+		else
+		{
+			//Same as above but inverted sides.
+			w = x->parent->left;
+			if( w && w->color == CNRBTREE_COLOR_RED )
+			{
+				w->color = CNRBTREE_COLOR_BLACK;
+				x->parent->color = CNRBTREE_COLOR_RED;
+				cnrbtree_generic_rotateright( x->parent );
+				w = x->parent->left;
+			}
+			if( ( !(w->right) || w->right->color == CNRBTREE_COLOR_BLACK ) && 
+				( !(w->left) || w->left->color == CNRBTREE_COLOR_BLACK ) )
+			{
+				w->color = CNRBTREE_COLOR_RED;
+				x = x->parent;
+			}
+			else
+			{
+				if( !(w->left) || w->left->color == CNRBTREE_COLOR_BLACK )
+				{
+					w->right->color = CNRBTREE_COLOR_BLACK;
+					w->color = CNRBTREE_COLOR_RED;
+					cnrbtree_generic_rotateleft( w );
+					w = x->parent->left;
+				}
+				w->color = x->parent->color;
+				x->parent->color = CNRBTREE_COLOR_BLACK;
+				w->left->color = CNRBTREE_COLOR_BLACK;
+				printf( "++++R\n" );
+				cnrbtree_generic_rotateright( x->parent );
+				break;
+			}
+		}
+	}
+
+	x->color = CNRBTREE_COLOR_BLACK;
+
+	// We must affix the root node's ptr correctly.
+	while( x->parent ) { x = x->parent; }
+	T->node = x;
+}
+
+CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_transplant( cnrbtree_generic * T, cnrbtree_generic_node * u, cnrbtree_generic_node * v, cnrbtree_generic_node * fakenil )
+{
+	cnrbtree_generic_node * up = u->parent;
+
+//	if( !u ) u = fakenil;
+//	if( !v ) v = fakenil;
+
+	printf( "u: %p v: %p up: %p T->node: %p\n", u, v, up, T->node );
+	if( up )
+		printf( "up-left: %p up-right: %p\n", up->left, up->right );
+	if( up == 0 )
+		T->node = v;
+	else if( u == up->left )
+		up->left = v;
+	else
+		up->right = v;
+
+	//XXX Is this correct?  (Delete this comment if this code works)
+	if( v )
+	{
+		v->parent = u->parent;
+	}
+	else
+	{
+		fakenil->parent = u->parent;
+	}
+}
+
+//"RB-DELETE(T, z)"
+CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic_node * z, cnrbtree_generic * T )
+{
+	//Implementation in MIT book of Cormen's algorithm.  This is attractive because there are no expensive copies.
+	//XXX TODO: Examine 
+	//From https://code.google.com/archive/p/cstl/source/default/source 
+	//It is from the 2nd edition instead of the 3rd though.
+	cnrbtree_generic_node * x;
+	cnrbtree_generic_node * y = z;
+	char y_original_color = y->color;
+
+	cnrbtree_generic_node dummynil;
+	memset( &dummynil, 0, sizeof( dummynil ) );
+#if 0
+	// Added (This whole section... Ugh... XXX HELP The pseudocode doesn't work in some cases if we've got no children.
+	//printf( "CHECK %p %p %d==%d\n", z->left, z->right, z->color, CNRBTREE_COLOR_RED ); 
+	if( z->left == 0 && z->right == 0 && z->color == CNRBTREE_COLOR_RED )
+	{
+		//That's OK! We don't need it.
+		if( z->parent )
+		{
+			if( z->parent->left == z ) z->parent->left = 0;
+			if( z->parent->right == z ) z->parent->right = 0;
+		}
+		else
+		{
+			//We're the last element.
+			T->node = 0;
+		}
+		return;
+	}
+#endif
+
+	if( z->left == 0 )
+	{
+		x = z->right;
+		cnrbtree_generic_transplant( T, z, x, &dummynil );
+		if( !x ) { x = z; } //XXX Added
+		printf( "FSwitchL X: %p\n", x );
+	}
+	else if( z->right == 0 )
+	{
+		x = z->left;
+		cnrbtree_generic_transplant( T, z, x, &dummynil );		
+		if( !x ) { x = z; } //XXX Added
+		printf( "FSwitchR X: %p\n", x );
+	}
+	else
+	{
+		y = cnrbtree_generic_next( z );	//Modified (But I think correct)
+		if( !y ) 			y = cnrbtree_generic_prev( z );
+
+		printf( "Z's successor: %p\n", y );
+		y_original_color = y->color;
+		x = y->right;	//This is dubious.  I am concerned about the behaivor if X is nil.
+
+		printf( "Y parent: %p\n", y->parent );
+		if( y->parent == z )
+		{
+			x->parent = y;
+		}
+		else
+		{
+			printf( "Transplating %p %p\n", y, y->right );
+			cnrbtree_generic_transplant( T, y, y->right, &dummynil );	//XXX TODO: Are there cases where this can be dirty?  I.e. y->right == NULL
+			y->right = z->right;
+			if( y->right ) y->right->parent = y;
+		}
+
+		cnrbtree_generic_transplant( T, z, y, &dummynil );
+
+		if( !x )
+		{
+			printf( "WARN: %p %p\n", z, y );
+			x = y;//&dummynil; //XXX XXX XXX XXX XXX XXX XXX XXX XXX XXX THIS IS WRONG!!!
+			printf( "FIND IN THIS LIST:    %p  %p  %p  %p\n", z, y, z->left, z->right );
+		}
+
+
+		y->left = z->left;
+		if( y->left ) y->left->parent = y;
+
+
+			PrintTreeRootIt( x );
+			printf( "DONE Transplating %p %p\n", y, y->right );
+
+		y->color = z->color;
+	}
+	if( y_original_color == CNRBTREE_COLOR_BLACK )
+	{
+		printf( "Y orig color black %p\n", x );
+		PrintTreeRootIt( x );
+
+		cnrbtree_generic_removefixup( T, x );
+	}
+}
+
+#else 
+
+//Wikipedia and other sources implementation.
 
 CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_replace_node( cnrbtree_generic_node * n, cnrbtree_generic_node * child )
 {
@@ -606,6 +835,10 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic_no
 	cnrbtree_generic_update_begin_end( t );
 	return;
 }
+
+#endif
+
+
 
 #endif // CNRBTREE_IMPLEMENTATION
 
