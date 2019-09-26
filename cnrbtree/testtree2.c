@@ -40,7 +40,7 @@ int anotherfn()
 	printf( "%d\n", RBA( tree, "you" ).a );
 	printf( "%d\n", RBA( tree, "world" ).b );
 
-	cnrbtree_str_payload_delete( tree, "are" );
+	cnrbtree_str_payload_remove( tree, "are" );
 
 	RBFOREACH( str_payload, tree, i )
 	{

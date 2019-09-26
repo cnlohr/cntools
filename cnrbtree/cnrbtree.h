@@ -165,6 +165,9 @@ CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_prev( cnrbtr
 
 #ifdef CNRBTREE_IMPLEMENTATION
 
+//XXX TODO Later, try doing the NILification described in MIT Press Introduction to Algorithms 3rd Edition Page 310
+//CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node RBNIL = { &NIL, &NIL, &NIL, CNRBTREE_COLOR_BLACK };
+
 CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_next( cnrbtree_generic_node * node )
 {
 	if( !node ) return 0;
@@ -222,12 +225,12 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_rotateleft( cnrbtree_generic_no
 	/* From Wikipedia's RB Tree Page */
 	cnrbtree_generic_node * nnew = n->right;
 	cnrbtree_generic_node * p = n->parent;
-	n->right = nnew->left;
+	cnrbtree_generic_node * nright = n->right = nnew->left;
 	nnew->left = n;
 	n->parent = nnew;
 	/* Handle other child/parent pointers. */
-	if ( n->right ) {
-		n->right->parent = n;
+	if ( nright ) {
+		nright->parent = n;
 	}
 	/* Initially n could be the root. */
 	if ( p ) {
@@ -241,16 +244,16 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_rotateleft( cnrbtree_generic_no
 }
 
 CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_rotateright( cnrbtree_generic_node * n )
-{ /* From Wikipedia's RB Tree Page */
+{
+	/* From Wikipedia's RB Tree Page */
 	cnrbtree_generic_node * nnew = n->left;
-	cnrbtree_generic_node * p;
-	p = n->parent;
-	n->left = nnew->right;
+	cnrbtree_generic_node * p = n->parent;
+	cnrbtree_generic_node * nleft = n->left = nnew->right;
 	nnew->right = n;
 	n->parent = nnew;
 	/* Handle other child/parent pointers. */
-	if ( n->left ) {
-		n->left->parent = n;
+	if ( nleft ) {
+		nleft->parent = n;
 	}
 	/* Initially n could be the root. */
 	if ( p ) {
@@ -263,72 +266,63 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_rotateright( cnrbtree_generic_n
 	nnew->parent = p;
 }
 
+// MIT Press Introduction to Algorithms version, modified to use uncles.  Does not use recursion.
 
-CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_insert_repair_tree( cnrbtree_generic_node * n )
+CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_insert_repair_tree_with_fixup( cnrbtree_generic_node * z, cnrbtree_generic * tree  )
 {
-	cnrbtree_generic_node * p = n->parent;
-	if ( !p )
+	cnrbtree_generic_node * zp;
+	cnrbtree_generic_node * zpp;
+	while( ( zp = z->parent ) && zp->color == CNRBTREE_COLOR_RED )
 	{
-		//InsertCase1(n); (In general, in this implementation, this block should not be hit)
-		n->color = CNRBTREE_COLOR_BLACK;
-	}
-	else if ( p->color == CNRBTREE_COLOR_BLACK)
-	{
-		//InsertCase2(n);
-		;
-	}
-	else
-	{
-		cnrbtree_generic_node * g = p->parent;
-		cnrbtree_generic_node * u = ( g ? ( (p == g->left)?g->right:g->left ) : 0 );
+		zpp = zp->parent;
 
-		if ( u && u->color == CNRBTREE_COLOR_RED)
+		cnrbtree_generic_node * u = zpp?( (zp == zpp->left)?zpp->right:zpp->left ):0;
+		if( u && u->color == CNRBTREE_COLOR_RED )
 		{
-			//InsertCase3(n);
-			p->color = CNRBTREE_COLOR_BLACK;
+			//Case 1
+			zp->color = CNRBTREE_COLOR_BLACK;
 			u->color = CNRBTREE_COLOR_BLACK;
-			g->color = CNRBTREE_COLOR_RED;
-			cnrbtree_generic_insert_repair_tree( g );
+			zpp->color = CNRBTREE_COLOR_RED;
+			z = zpp;
 		}
 		else
 		{
-			//InsertCase4(n)
-			p = n->parent;
-			g = p->parent;
-
-			if ( n == p->right && p == g->left )
+			if( zpp )
 			{
-				cnrbtree_generic_rotateleft(p);
-				n = n->left;
-			} else if ( n == p->left && p == g->right ) {
-				cnrbtree_generic_rotateright(p);
-				n = n->right;
+				//Case 2
+				if( zp == zpp->left && z == zp->right )
+				{
+					cnrbtree_generic_rotateleft( zp );
+					z = zp;
+					zp = z->parent;
+					zpp = zp->parent;
+				}
+				else if( zp == zpp->right && z == zp->left )
+				{
+					cnrbtree_generic_rotateright( zp );
+					z = zp;
+					zp = z->parent;
+					zpp = zp->parent;
+				}
 			}
 
-			//InsertCase4Step2(n);
-			p = n->parent;
-			g = p->parent;
-			if (n == p->left) {
-				cnrbtree_generic_rotateright(g);
-			} else {
-				cnrbtree_generic_rotateleft(g);
-			}
+			zp->color = CNRBTREE_COLOR_BLACK;
 
-			p->color = CNRBTREE_COLOR_BLACK;
-			//if( g ) //Check probably not needed.
-			g->color = CNRBTREE_COLOR_RED;
+			//Case 3
+			if( zpp )
+			{
+				zpp->color = CNRBTREE_COLOR_RED;
+				if( zpp->left == zp )
+					cnrbtree_generic_rotateright( zpp );
+				else
+					cnrbtree_generic_rotateleft( zpp );
+			}
 		}
 	}
-}
 
-
-CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_insert_repair_tree_with_fixup( cnrbtree_generic_node * n, cnrbtree_generic * tree )
-{
-	cnrbtree_generic_insert_repair_tree( n );
-
-	/* Lastly, we must affix the root node's ptr correctly. */
-	while( n->parent ) { n = n->parent; }
-	tree->node = n;
+	// Lastly, we must affix the root node's ptr correctly.
+	while( z->parent ) { z = z->parent; }
+	tree->node = z;
 }
 
 
@@ -344,7 +338,7 @@ CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_insert_repai
 	if( tree->node == 0 )
 	{
 		ret->parent = 0;
-		ret->color = CNRBTREE_COLOR_BLACK; /* InsertCase1 */
+		ret->color = CNRBTREE_COLOR_BLACK; /* InsertCase1 from wikipedia */
 		tree->node = ret;
 		cnrbtree_generic_update_begin_end( tree );
 		return ret;
@@ -363,6 +357,8 @@ CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_insert_repai
 	cnrbtree_generic_update_begin_end( tree );
 	return ret;
 }
+
+/////////////////EXCHANGING//////////////////
 
 
 CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_exchange_nodes_internal( cnrbtree_generic_node * n1, cnrbtree_generic_node * n )
@@ -388,13 +384,6 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_exchange_nodes_internal( cnrbtr
 
 	if( n1->parent == n1 ) n1->parent = n;
 	if( n->parent == n ) n->parent = n1;
-
-//I think this is OK, and automatically fixed up by the lower cases.
-//	if( n1->left == n1 ) n1->left = n;
-//	if( n->left == n ) n->left = n1;
-//	if( n1->right == n1 ) n1->right = n;
-//	if( n->right == n ) n->right = n1;
-
 	if( n1->parent )
 	{
 		if( n1->parent->left == n ) n1->parent->left = n1;
@@ -410,8 +399,9 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_exchange_nodes_internal( cnrbtr
 	if( n1->left ) n1->left->parent = n1;
 	if( n->right ) n->right->parent = n;
 	if( n->left ) n->left->parent = n;
-
 }
+
+
 
 /////////////////DELETION//////////////////
 

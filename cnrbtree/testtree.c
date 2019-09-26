@@ -1,3 +1,5 @@
+//#define FULLTEST
+
 struct cnrbtree_generic_node_t;
 int PrintTreeRootIt( struct cnrbtree_generic_node_t * t );
 
@@ -5,6 +7,7 @@ int PrintTreeRootIt( struct cnrbtree_generic_node_t * t );
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdint.h>
 #include "cnrbtree.h"
 
 int gints = 0;
@@ -13,15 +16,20 @@ int gints = 0;
 #define intcopy(x, y, z) (x = y, gints++, z = 0 ) 
 #define intdelete( x, y )     gints--;
 
+#define intcomp(x, y) ( x - y )
+#define strtest( x, y ) ((*((int64_t*)x)) == (*((int64_t*)y))?0: (((*((int64_t*)x)) - (*((int64_t*)y)))) < 0 ? - 1 : 1 )
+
 typedef char * str;
 CNRBTREETEMPLATE( int, int, intcomp, intcopy, intdelete );
-CNRBTREETEMPLATE( str, str, RBstrcmp, RBstrcpy, RBstrdel );
+CNRBTREETEMPLATE( str, str, /*RBstrcmp*/ strtest, RBstrcpy, RBstrdel );
 
 int PrintTree( cnrbtree_intint_node * t, int depth, cnrbtree_intint_node * parent );
 
 int PrintTreeRootIt( cnrbtree_generic_node * t )
 {
+#ifndef FULLTEST
 	return 0;
+#endif
 	while( t->parent ) t = t->parent;
 	PrintTree( (cnrbtree_intint_node *)t, -10000, 0 );
 	return 0;
@@ -30,7 +38,9 @@ int PrintTreeRootIt( cnrbtree_generic_node * t )
 
 int PrintTree( cnrbtree_intint_node * t, int depth, cnrbtree_intint_node * parent )
 {
+#ifndef FULLTEST
 	return 0;
+#endif
 	int stordepth = depth;
 	if( depth < 0 ) depth += 10000;
 
@@ -68,8 +78,9 @@ int PrintTree( cnrbtree_intint_node * t, int depth, cnrbtree_intint_node * paren
 
 int main()
 {
-#if 1
+#ifndef FULLTEST
 	cnrbtree_strstr * tree = cnrbtree_strstr_create();
+	printf( "%d\n", (int)strtest( "abcdefgh", "abcdefga" ) );
 
 	srand(0);
 	#define ITERATIONS 1000
@@ -84,7 +95,7 @@ int main()
 				stta[i][k] = (rand()%26) + 'a';
 			stta[i][k] = 0;
 
-			if( cnrbtree_strstr_getltgt( tree, stta[i], 0, 0 ) )
+			if( cnrbtree_strstr_get( tree, stta[i] ) )
 			{
 				printf( "Duplicate.  Try again.\n" );
 				exit( 5 );
@@ -101,14 +112,14 @@ int main()
 
 		for( i = 0; i < ITERATIONS; i++ )
 		{
-			cnrbtree_strstr_node * n = cnrbtree_strstr_getltgt( tree, stta[i], 0, 0 );
+			cnrbtree_strstr_node * n = cnrbtree_strstr_get( tree, stta[i] );
 			if( !n )
 			{
 				printf( "Access fault.\n" );
 				exit( 5 );
 			}
 			free( n->data );
-			cnrbtree_strstr_delete( tree, stta[i] );
+			cnrbtree_strstr_remove( tree, stta[i] );
 		}
 		if( tree->node )
 		{
@@ -123,11 +134,11 @@ int main()
 
 	}
 
+	printf( "OK\n" );
+
 	exit( 0 );
 
-#endif
-
-#if 0
+#else
 	cnrbtree_intint * tree;
 	tree = cnrbtree_intint_create();
 	srand(0);
@@ -143,7 +154,7 @@ int main()
 	retry:
 			addlist[i] = rand();
 		//	printf( "Adding: %d\n", (addlist[i] = rand()) );
-			if( cnrbtree_intint_getltgt( tree, addlist[i], 0, 0 ) )
+			if( cnrbtree_intint_get( tree, addlist[i] ) )
 			{
 				printf( "Duplicate.  Try again.\n" );
 				goto retry;
@@ -165,12 +176,12 @@ int main()
 		{
 			int k = addlist[i];
 		//	printf( "Deleting %d (%d)\n", k, i );
-			if( !cnrbtree_intint_getltgt( tree, addlist[i], 0, 0 ) )
+			if( !cnrbtree_intint_get( tree, addlist[i] ) )
 			{
 				printf( "Access fault.\n" );
 				exit( 5 );
 			}
-			cnrbtree_intint_delete( tree, k );
+			cnrbtree_intint_remove( tree, k );
 		//	printf( "Deleted %d\n", k );
 			PrintTree( tree->node, 0,0 );
 		}
@@ -194,7 +205,7 @@ int main()
 		PrintTree( tree->node, 0, 0 );
 retry2:
 		printf( "Adding: %d\n", (addlist[i] = rand()) );
-		if( cnrbtree_intint_getltgt( tree, addlist[i], 0, 0 ) )
+		if( cnrbtree_intint_get( tree, addlist[i] ) )
 		{
 			printf( "Duplicate.  Try again.\n" );
 			goto retry2;
