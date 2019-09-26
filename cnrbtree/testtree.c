@@ -1,4 +1,4 @@
-//#define FULLTEST
+#define FULLTEST
 
 struct cnrbtree_generic_node_t;
 int PrintTreeRootIt( struct cnrbtree_generic_node_t * t );
@@ -30,8 +30,8 @@ int PrintTreeRootIt( cnrbtree_generic_node * t )
 #ifndef FULLTEST
 	return 0;
 #endif
-	while( t->parent != RBNIL ) t = t->parent;
-	PrintTree( (cnrbtree_intint_node *)t, -10000, (cnrbtree_intint_node*)RBNIL );
+	while( !t->parent->nil ) t = t->parent;
+	PrintTree( (cnrbtree_intint_node *)t, -10000, (cnrbtree_intint_node*)t->parent );
 	return 0;
 }
 
@@ -44,7 +44,7 @@ int PrintTree( cnrbtree_intint_node * t, int depth, cnrbtree_intint_node * paren
 	int stordepth = depth;
 	if( depth < 0 ) depth += 10000;
 
-	if( (cnrbtree_generic_node*)t == RBNIL )
+	if( t->nil )
 	{
 		printf( "%*s-\n", depth*4, "" );
 		return 1;
@@ -57,14 +57,14 @@ int PrintTree( cnrbtree_intint_node * t, int depth, cnrbtree_intint_node * paren
 		fprintf( stderr, "Black Fault (%d != %d)\n", d1, d2 );
 		exit(1);
 	}
-	if( stordepth >= 0 && t->color == CNRBTREE_COLOR_RED && (cnrbtree_generic_node*)t->parent != RBNIL && t->parent->color == CNRBTREE_COLOR_RED )
+	if( stordepth >= 0 && t->color == CNRBTREE_COLOR_RED && !t->parent->nil && t->parent->color == CNRBTREE_COLOR_RED )
 	{
 		fprintf( stderr, "Red Fault\n" );
 		exit(1);
 	}
 	if( stordepth >= 0 && t->parent != parent )
 	{
-		fprintf( stderr, "Parent fault [%p %p %p]\n", RBNIL, t->parent, parent );
+		fprintf( stderr, "Parent fault [%p %p]\n", t->parent, parent );
 		exit( 1);
 	}
 	return (depth < 0)?-1:(d1 + (t->color == CNRBTREE_COLOR_BLACK));
@@ -120,9 +120,9 @@ int main()
 			free( n->data );
 			cnrbtree_strstr_remove( tree, stta[i] );
 		}
-		if( tree->node != (void*)RBNIL )
+		if( !tree->node->nil )
 		{
-			printf( "Excess fault %p %p\n", tree->node, RBNIL );
+			printf( "Excess fault %p\n", tree->node );
 			exit( 6 );
 		}
 		if( tree->size != 0 )
@@ -149,7 +149,7 @@ int main()
 	{
 		for( i = 0; i < ITERATIONS; i++ )
 		{
-			PrintTree( tree->node, 0, (cnrbtree_intint_node*)RBNIL );
+			PrintTree( tree->node, 0, tree->node->parent );
 	retry:
 			addlist[i] = rand()%(ITERATIONS*10);
 		//	printf( "Adding: %d\n", (addlist[i] = rand()) );
@@ -170,7 +170,7 @@ int main()
 			exit( 5 );
 		}
 		printf( "FINAL TREE BEFORE REMOVAL\n" );
-		PrintTree( tree->node, 0, (cnrbtree_intint_node*)RBNIL );
+		PrintTree( tree->node, 0, tree->node->parent );
 
 		for( i = 0; i < ITERATIONS; i++ )
 		{
@@ -183,9 +183,9 @@ int main()
 			}
 			cnrbtree_intint_remove( tree, k );
 		//	printf( "Deleted %d\n", k );
-			PrintTree( tree->node, 0, (cnrbtree_intint_node*)RBNIL );
+			PrintTree( tree->node, 0, tree->node->parent );
 		}
-		if( tree->node != (void*)RBNIL )
+		if( !tree->node->nil )
 		{
 			printf( "Excess fault\n" );
 			exit( 6 );
@@ -202,7 +202,7 @@ int main()
 
 	for( i = 0; i < ITERATIONS; i++ )
 	{
-		PrintTree( tree->node, 0, (cnrbtree_intint_node*)RBNIL );
+		PrintTree( tree->node, 0, tree->node->parent );
 retry2:
 		printf( "Adding: %d\n", (addlist[i] = rand()) );
 		if( cnrbtree_intint_get( tree, addlist[i] ) )

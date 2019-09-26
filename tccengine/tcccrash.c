@@ -456,7 +456,7 @@ tcccrash_syminfo * tcccrash_symget( intptr_t address )
 	{
 		cnrbtree_ptrsimi_node * n = cnrbtree_ptrsimi_get2( i->data, address, 1 );
 		if( n->data->address > address )
-			n = (void*)cnrbtree_generic_prev( (void*)n );
+			n = (void*)cnrbtree_generic_prev( (cnrbtree_generic*)i->data, (void*)n );
 		if( !n ) continue;
 		intptr_t diff = address - n->data->address;
 		if( mindiff == 0 || ( diff < mindiff && diff < n->data->size + 16 ) )
