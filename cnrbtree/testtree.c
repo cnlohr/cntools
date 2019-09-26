@@ -1,4 +1,4 @@
-#define FULLTEST
+//#define FULLTEST
 
 struct cnrbtree_generic_node_t;
 int PrintTreeRootIt( struct cnrbtree_generic_node_t * t );
@@ -6,6 +6,7 @@ int PrintTreeRootIt( struct cnrbtree_generic_node_t * t );
 #define CNRBTREE_IMPLEMENTATION
 
 #include <stdlib.h>
+#include <string.h>
 #include <stdio.h>
 #include <stdint.h>
 #include "cnrbtree.h"

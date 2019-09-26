@@ -68,6 +68,19 @@
      //Typesafe delete.
      RBDESTROY( tree );
 
+
+  Also provided: cnptrset - for a set-type data structure.  It is actually
+     a cnrbtree_rbset_trbset_null_t and can be used as such.  This looks odd
+     but, the size of the payload is 0 and because the types are templated
+     the actual overhead for having a 0 payload is zero.
+
+     cnptrset * set = cnptrset_create();
+     static int var;
+     cnptrset_insert( set, &var );
+     cnptrset_foreach( set, i ) { printf( "%p\n", i ); }
+     cnptrset_remove( set, &var );
+     cnptrset_destroy( set );
+
   Authors:
     2019 <>< Charles Lohr
  
@@ -228,7 +241,8 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_update_begin_end( cnrbtree_gene
 
 CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_rotateleft( cnrbtree_generic * tree, cnrbtree_generic_node * n )
 {
-	/* From Wikipedia's RB Tree Page */
+	/* From Wikipedia's RB Tree Page, seems slightly better than the CLRS model, but now that it's been
+		modified, there seems to be very little difference between them. */
 	cnrbtree_generic_node * nil = &tree->nil;
 	cnrbtree_generic_node * nnew = n->right;
 	cnrbtree_generic_node * p = n->parent;
