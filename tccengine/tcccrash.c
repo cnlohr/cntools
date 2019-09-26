@@ -5,6 +5,13 @@
 // Don't forget to compile with -rdynamic.
 //
 
+#ifndef TCCCRASH_THREAD_MALLOC
+#define TCCCRASH_THREAD_MALLOC  malloc
+#endif
+#ifndef TCCCRASH_THREAD_FREE
+#define TCCCRASH_THREAD_FREE    free
+#endif
+
 //XXX TODO: Windows support untested.
 //XXX TODO: have some mechanism/flag to say "if this thread crashes, just kill it but don't exit the program
 //XXX TODO: can we find a way we don't have to copy the symbol names and paths?
@@ -103,6 +110,10 @@ static void SetupCrashHandler()
 	SetUnhandledExceptionFilter( windows_exception_handler );
 }
 
+static void UnsetCrashHandler()
+{
+	SetUnhandledExceptionFilter( 0 );
+}
 
 #else
 
@@ -250,6 +261,18 @@ finishup:
 }
 
 
+static void UnsetCrashHandler()
+{
+	sigaction(SIGSEGV, 0, NULL);
+	sigaction(SIGABRT, 0, NULL);
+	sigaction(SIGFPE, 0, NULL);
+	sigaction(SIGILL, 0, NULL);
+	sigaction(SIGALRM, 0, NULL); //Maybe have this to watchdog tcc tasks?
+#ifdef SIGBUS
+	sigaction(SIGBUS, 0, NULL);
+#endif
+}
+
 static void SetupCrashHandler()
 {
 	void * v;
@@ -316,8 +339,13 @@ void tcccrash_install()
 
 void tcccrash_uninstall()
 {
+	UnsetCrashHandler();
 	OGDeleteTLS( threadcheck );
+	free( scratchcp.signalstack );
+	free( scratchcp.lastcrash );
+	free( scratchcp.btrace );
 }
+
 char * tcccrash_getcrash()
 {
 	tcccrashcheckpoint * cp = (tcccrashcheckpoint *)OGGetTLS( threadcheck );
@@ -326,11 +354,16 @@ char * tcccrash_getcrash()
 
 void tcccrash_closethread()
 {
-	tcccrashcheckpoint * cp = (tcccrashcheckpoint *)OGGetTLS( threadcheck );
+	tcccrash_closethread_by_id( (tcccrashcheckpoint *)OGGetTLS( threadcheck ) );
+}
+
+void tcccrash_closethread_by_id( tcccrashcheckpoint * cp )
+{
 	if( cp )
 	{
-		if( cp->lastcrash ) free( cp->lastcrash );
-		free( cp );
+		if( cp->lastcrash ) TCCCRASH_THREAD_FREE( cp->lastcrash );
+		if( cp->btrace ) TCCCRASH_THREAD_FREE( cp->btrace );
+		TCCCRASH_THREAD_FREE( cp );
 	}
 }
 
@@ -339,10 +372,10 @@ tcccrashcheckpoint * tcccrash_getcheckpoint()
 	tcccrashcheckpoint * cp = (tcccrashcheckpoint *)OGGetTLS( threadcheck );
 	if( cp == 0 )
 	{
-		cp = malloc( sizeof( tcccrashcheckpoint ) );
+		cp = TCCCRASH_THREAD_MALLOC( sizeof( tcccrashcheckpoint ) );
 		memset( cp, 0, sizeof( tcccrashcheckpoint ) );
-		cp->lastcrash = malloc( CRASHDUMPBUFFER );
-		cp->btrace = malloc( sizeof(void*) * MAXBTDEPTH );
+		cp->lastcrash = TCCCRASH_THREAD_MALLOC( CRASHDUMPBUFFER );
+		cp->btrace = TCCCRASH_THREAD_MALLOC( sizeof(void*) * MAXBTDEPTH );
 		cp->can_jump = 1;	//XXX TODO: Should this be 0?
 		OGSetTLS( threadcheck, cp );
 	}

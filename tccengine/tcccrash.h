@@ -15,6 +15,8 @@
 //3: Process a crash dump.
 
 void tcccrash_install();
+void tcccrash_uninstall();
+
 //tcccrash_checkpoint returns 0 on success, nonzero on fault.
 #if defined( WIN32 ) || defined( WINDOWS ) || defined( WIN64 )
 #define  tcccrash_checkpoint() ( tcccrash_getcheckpoint()->can_jump = 1, setjmp( tcccrash_getcheckpoint()->jmpbuf ) )
@@ -54,6 +56,8 @@ typedef struct TCCState TCCState;
 
 //TCCCrash will handle deleting the pointer from here if need be.
 tcccrashcheckpoint * tcccrash_getcheckpoint();
+void tcccrash_closethread();
+void tcccrash_closethread_by_id( tcccrashcheckpoint * cp );
 
 //This consumes symadd, it will handle freeing it later.
 void tcccrash_symset( intptr_t tag, tcccrash_syminfo * symadd );
