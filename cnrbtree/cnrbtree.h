@@ -77,6 +77,7 @@
      cnptrset * set = cnptrset_create();
      static int var;
      cnptrset_insert( set, &var );
+     void * i; //Quirk in cnptrset_foreach.  (TODO: can we remove that quirk?)
      cnptrset_foreach( set, i ) { printf( "%p\n", i ); }
      cnptrset_remove( set, &var );
      cnptrset_destroy( set );
@@ -185,42 +186,53 @@ CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_prev( cnrbtr
 
 #ifdef CNRBTREE_IMPLEMENTATION
 
+//The syntax used inside these functions is a little odd. It is
+// written to help hint to the compiler what can be optimized.
+// after significant testing, it seems to provide an edge over
+// writing node->parent over and over when it should just be
+// stored to a temporary register.
 CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_next( cnrbtree_generic *tree, cnrbtree_generic_node * node )
 {
 	cnrbtree_generic_node * nil = &tree->nil;
+	cnrbtree_generic_node * tmp;
 	if( node == nil ) return 0;
-	if( node->right != nil )
+	tmp = node->right;
+	if( tmp != nil )
 	{
-		node = node->right;
-		while( node->left != nil ) node = node->left;
+		node = tmp;
+		while( (tmp = node->left), tmp != nil ) node = tmp;
 		return node;
 	}
-	if( node->parent != nil && node == node->parent->left )
+	tmp = node->parent;
+	if( tmp != nil && node == tmp->left )
 	{
-		return node->parent;
+		return tmp;
 	}
-	while( node->parent != nil && node->parent->right == node ) node = node->parent;
-	return node->parent;
+	while( tmp != nil && tmp->right == node ) { node = tmp; tmp = node->parent; }
+	return tmp;
 }
 
 
 CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_prev( cnrbtree_generic * tree, cnrbtree_generic_node * node )
 {
 	cnrbtree_generic_node * nil = &tree->nil;
+	cnrbtree_generic_node * tmp;
 
 	if( node == nil ) return 0;
-	if( node->left != nil )
+	tmp = node->left;
+	if( tmp != nil )
 	{
-		node = node->left;
-		while( node->right != nil ) node = node->right;
+		node = tmp;
+		while( (tmp = node->right), tmp != nil ) node = tmp;
 		return node;
 	}
-	if( node->parent != nil && node == node->parent->right )
+	tmp = node->parent;
+	if( tmp != nil && node == tmp->right )
 	{
-		return node->parent;
+		return tmp;
 	}
-	while( node->parent != nil && node->parent->left == node ) node = node->parent;
-	return node->parent;
+	while( tmp != nil && tmp->left == node ) { node = tmp; tmp = node->parent; }
+	return tmp;
 }
 
 
@@ -341,7 +353,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_insert_repair_tree_with_fixup( 
 	}
 
 	// Lastly, we must affix the root node's ptr correctly.
-	while( z->parent != nil ) { z = z->parent; }
+	while( (zp = z->parent), zp != nil ) { z = zp; }
 	tree->node = z;
 }
 
@@ -389,24 +401,26 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removefixup( cnrbtree_generic *
 {
 	cnrbtree_generic_node * nil = &T->nil;
 	cnrbtree_generic_node * w;
+	cnrbtree_generic_node * xp;
 
 	while( x->color == CNRBTREE_COLOR_BLACK )
 	{
-		if( x == x->parent->left )
+		xp = x->parent;
+		if( x == xp->left )
 		{
-			w = x->parent->right;
+			w = xp->right;
 			if( w->color == CNRBTREE_COLOR_RED )
 			{
 				w->color = CNRBTREE_COLOR_BLACK;
-				x->parent->color = CNRBTREE_COLOR_RED;
-				cnrbtree_generic_rotateleft( T, x->parent );
-				w = x->parent->right;
+				xp->color = CNRBTREE_COLOR_RED;
+				cnrbtree_generic_rotateleft( T, xp );
+				w = xp->right;
 			}
 			if( ( w->left->color == CNRBTREE_COLOR_BLACK ) && 
 				( w->right->color == CNRBTREE_COLOR_BLACK ) )
 			{
 				w->color = CNRBTREE_COLOR_RED;
-				x = x->parent;
+				x = xp;
 			}
 			else
 			{
@@ -415,31 +429,31 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removefixup( cnrbtree_generic *
 					w->left->color = CNRBTREE_COLOR_BLACK;
 					w->color = CNRBTREE_COLOR_RED;
 					cnrbtree_generic_rotateright( T, w );
-					w = x->parent->right;
+					w = xp->right;
 				}
 				w->color = x->parent->color;
-				x->parent->color = CNRBTREE_COLOR_BLACK;
+				xp->color = CNRBTREE_COLOR_BLACK;
 				w->right->color = CNRBTREE_COLOR_BLACK;
-				cnrbtree_generic_rotateleft( T, x->parent );
+				cnrbtree_generic_rotateleft( T, xp );
 				break;
 			}
 		}
 		else
 		{
 			//Same as above but inverted sides.
-			w = x->parent->left;
+			w = xp->left;
 			if( w->color == CNRBTREE_COLOR_RED )
 			{
 				w->color = CNRBTREE_COLOR_BLACK;
-				x->parent->color = CNRBTREE_COLOR_RED;
-				cnrbtree_generic_rotateright( T, x->parent );
-				w = x->parent->left;
+				xp->color = CNRBTREE_COLOR_RED;
+				cnrbtree_generic_rotateright( T, xp );
+				w = xp->left;
 			}
 			if( ( w->right->color == CNRBTREE_COLOR_BLACK ) && 
 				( w->left->color == CNRBTREE_COLOR_BLACK ) )
 			{
 				w->color = CNRBTREE_COLOR_RED;
-				x = x->parent;
+				x = xp;
 			}
 			else
 			{
@@ -448,12 +462,12 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removefixup( cnrbtree_generic *
 					w->right->color = CNRBTREE_COLOR_BLACK;
 					w->color = CNRBTREE_COLOR_RED;
 					cnrbtree_generic_rotateleft( T, w );
-					w = x->parent->left;
+					w = xp->left;
 				}
-				w->color = x->parent->color;
+				w->color = xp->color;
 				x->parent->color = CNRBTREE_COLOR_BLACK;
 				w->left->color = CNRBTREE_COLOR_BLACK;
-				cnrbtree_generic_rotateright( T, x->parent );
+				cnrbtree_generic_rotateright( T, xp );
 				break;
 			}
 		}
@@ -462,7 +476,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removefixup( cnrbtree_generic *
 	x->color = CNRBTREE_COLOR_BLACK;
 
 	// We must affix the root node's ptr correctly.
-	while( x->parent != nil ) { x = x->parent; }
+	while( (xp = x->parent), xp != nil ) { x = xp; }
 	T->node = x;
 }
 
@@ -476,7 +490,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_transplant( cnrbtree_generic * 
 		up->left = v;
 	else
 		up->right = v;
-	v->parent = u->parent;
+	v->parent = u->parent; //Not sure what algorithm witchcraft is going on here, but everything breaks if you "protect" this from NIL.
 }
 
 //"RB-DELETE(T, z)"
@@ -501,13 +515,13 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic_no
 	}
 	else
 	{
-		y = cnrbtree_generic_next( T, z );
-//		XXX How is it possible that this never fails?!
-//		if( y->nil )
-//			y = cnrbtree_generic_prev( z );
+		// XXX How is it possible that this never fails?! I would have expected to need to check if nil and if so, do cnrbtree_generic_prev.
+		y = cnrbtree_generic_next( T, z ); 
 
 		y_original_color = y->color;
-		x = y->right;	//This is dubious.  I am concerned about the behaivor if X is nil.
+		cnrbtree_generic_node * tmp = y->right;
+
+		x = tmp; //I would be concerned if X is nil, but that appears to be OK.
 
 		if( y->parent == z )
 		{
@@ -515,15 +529,15 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic_no
 		}
 		else
 		{
-			cnrbtree_generic_transplant( T, y, y->right );
-			y->right = z->right;
-			y->right->parent = y;
+			cnrbtree_generic_transplant( T, y, tmp );
+			tmp = y->right = z->right;
+			tmp->parent = y;
 		}
 
 		cnrbtree_generic_transplant( T, z, y );
 
-		y->left = z->left;
-		y->left->parent = y;
+		tmp = y->left = z->left;
+		tmp->parent = y;
 		y->color = z->color;
 	}
 	if( y_original_color == CNRBTREE_COLOR_BLACK )
@@ -592,7 +606,8 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic_no
 	CNRBTREE_TEMPLATE_DECORATOR cnrbtree_##key_t##data_t##_node * cnrbtree_##key_t##data_t##_access( cnrbtree_##key_t##data_t * tree, key_t key ) \
 	{\
 		cnrbtree_##key_t##data_t##_node * nil = &tree->nil; \
-		cnrbtree_##key_t##data_t##_node * tmp = 0; \
+		/* This function could utilize cnrbtree_##key_t##data_t##_get2 but would require an extra compare */ \
+		cnrbtree_##key_t##data_t##_node * tmp = 0;  \
 		cnrbtree_##key_t##data_t##_node * tmpnext = 0; \
 		cnrbtree_##key_t##data_t##_node * ret; \
 		tmp = tree->node; \
@@ -706,7 +721,7 @@ typedef cnrbtree_rbset_trbset_null_t cnptrset;
 #define cnptrset_insert( st, key ) cnrbtree_rbset_trbset_null_t_access( st, key )
 #define cnptrset_remove( st, key ) cnrbtree_rbset_trbset_null_t_remove( st, key )
 #define cnptrset_destroy( st ) cnrbtree_rbset_trbset_null_t_destroy( st )
-//Note, you need a pre-defined void * for the type in the iteration. i.e. void * i; cnptrfset_foreach( tree, i );
+//Note, you need a pre-defined void * for the type in the iteration. i.e. cnptrfset_foreach( tree, i );
 #define cnptrset_foreach( tree, i ) \
 	for( cnrbtree_rbset_trbset_null_t_node * node##i = tree->begin; \
 		i = (node##i)->key, node##i != &tree->nil; \
