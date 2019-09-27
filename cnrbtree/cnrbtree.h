@@ -396,90 +396,6 @@ CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_insert_repai
 /////////////////DELETION//////////////////
 
 
-//"RB-DELETE-FIXUP( T,x )"
-CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removefixup( cnrbtree_generic * T, cnrbtree_generic_node * x )
-{
-	cnrbtree_generic_node * nil = &T->nil;
-	cnrbtree_generic_node * w;
-	cnrbtree_generic_node * xp;
-
-	while( x->color == CNRBTREE_COLOR_BLACK )
-	{
-		xp = x->parent;
-		if( x == xp->left )
-		{
-			w = xp->right;
-			if( w->color == CNRBTREE_COLOR_RED )
-			{
-				w->color = CNRBTREE_COLOR_BLACK;
-				xp->color = CNRBTREE_COLOR_RED;
-				cnrbtree_generic_rotateleft( T, xp );
-				w = xp->right;
-			}
-			if( ( w->left->color == CNRBTREE_COLOR_BLACK ) && 
-				( w->right->color == CNRBTREE_COLOR_BLACK ) )
-			{
-				w->color = CNRBTREE_COLOR_RED;
-				x = xp;
-			}
-			else
-			{
-				if( w->right->color == CNRBTREE_COLOR_BLACK )
-				{
-					w->left->color = CNRBTREE_COLOR_BLACK;
-					w->color = CNRBTREE_COLOR_RED;
-					cnrbtree_generic_rotateright( T, w );
-					w = xp->right;
-				}
-				w->color = x->parent->color;
-				xp->color = CNRBTREE_COLOR_BLACK;
-				w->right->color = CNRBTREE_COLOR_BLACK;
-				cnrbtree_generic_rotateleft( T, xp );
-				break;
-			}
-		}
-		else
-		{
-			//Same as above but inverted sides.
-			w = xp->left;
-			if( w->color == CNRBTREE_COLOR_RED )
-			{
-				w->color = CNRBTREE_COLOR_BLACK;
-				xp->color = CNRBTREE_COLOR_RED;
-				cnrbtree_generic_rotateright( T, xp );
-				w = xp->left;
-			}
-			if( ( w->right->color == CNRBTREE_COLOR_BLACK ) && 
-				( w->left->color == CNRBTREE_COLOR_BLACK ) )
-			{
-				w->color = CNRBTREE_COLOR_RED;
-				x = xp;
-			}
-			else
-			{
-				if( w->left->color == CNRBTREE_COLOR_BLACK )
-				{
-					w->right->color = CNRBTREE_COLOR_BLACK;
-					w->color = CNRBTREE_COLOR_RED;
-					cnrbtree_generic_rotateleft( T, w );
-					w = xp->left;
-				}
-				w->color = xp->color;
-				x->parent->color = CNRBTREE_COLOR_BLACK;
-				w->left->color = CNRBTREE_COLOR_BLACK;
-				cnrbtree_generic_rotateright( T, xp );
-				break;
-			}
-		}
-	}
-
-	x->color = CNRBTREE_COLOR_BLACK;
-
-	// We must affix the root node's ptr correctly.
-	while( (xp = x->parent), xp != nil ) { x = xp; }
-	T->node = x;
-}
-
 CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_transplant( cnrbtree_generic * T, cnrbtree_generic_node * u, cnrbtree_generic_node * v )
 {
 	cnrbtree_generic_node * nil = &T->nil;
@@ -542,7 +458,86 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic_no
 	}
 	if( y_original_color == CNRBTREE_COLOR_BLACK )
 	{
-		cnrbtree_generic_removefixup( T, x );
+		//"RB-DELETE-FIXUP( T,x )"
+		cnrbtree_generic_node * w;
+		cnrbtree_generic_node * xp;
+
+		while( x->color == CNRBTREE_COLOR_BLACK )
+		{
+			xp = x->parent;
+			if( x == xp->left )
+			{
+				w = xp->right;
+				if( w->color == CNRBTREE_COLOR_RED )
+				{
+					w->color = CNRBTREE_COLOR_BLACK;
+					xp->color = CNRBTREE_COLOR_RED;
+					cnrbtree_generic_rotateleft( T, xp );
+					w = xp->right;
+				}
+				if( ( w->left->color == CNRBTREE_COLOR_BLACK ) && 
+					( w->right->color == CNRBTREE_COLOR_BLACK ) )
+				{
+					w->color = CNRBTREE_COLOR_RED;
+					x = xp;
+				}
+				else
+				{
+					if( w->right->color == CNRBTREE_COLOR_BLACK )
+					{
+						w->left->color = CNRBTREE_COLOR_BLACK;
+						w->color = CNRBTREE_COLOR_RED;
+						cnrbtree_generic_rotateright( T, w );
+						w = xp->right;
+					}
+					w->color = x->parent->color;
+					xp->color = CNRBTREE_COLOR_BLACK;
+					w->right->color = CNRBTREE_COLOR_BLACK;
+					cnrbtree_generic_rotateleft( T, xp );
+					break;
+				}
+			}
+			else
+			{
+				//Same as above but inverted sides.
+				w = xp->left;
+				if( w->color == CNRBTREE_COLOR_RED )
+				{
+					w->color = CNRBTREE_COLOR_BLACK;
+					xp->color = CNRBTREE_COLOR_RED;
+					cnrbtree_generic_rotateright( T, xp );
+					w = xp->left;
+				}
+				if( ( w->right->color == CNRBTREE_COLOR_BLACK ) && 
+					( w->left->color == CNRBTREE_COLOR_BLACK ) )
+				{
+					w->color = CNRBTREE_COLOR_RED;
+					x = xp;
+				}
+				else
+				{
+					if( w->left->color == CNRBTREE_COLOR_BLACK )
+					{
+						w->right->color = CNRBTREE_COLOR_BLACK;
+						w->color = CNRBTREE_COLOR_RED;
+						cnrbtree_generic_rotateleft( T, w );
+						w = xp->left;
+					}
+					w->color = xp->color;
+					x->parent->color = CNRBTREE_COLOR_BLACK;
+					w->left->color = CNRBTREE_COLOR_BLACK;
+					cnrbtree_generic_rotateright( T, xp );
+					break;
+				}
+			}
+		}
+
+		x->color = CNRBTREE_COLOR_BLACK;
+
+		// We must affix the root node's ptr correctly.
+		while( (xp = x->parent), xp != nil ) { x = xp; }
+		T->node = x;
+		//End "RB-DELETE-FIXUP( T,x )"
 	}
 }
 
@@ -609,7 +604,6 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic_no
 		/* This function could utilize cnrbtree_##key_t##data_t##_get2 but would require an extra compare */ \
 		cnrbtree_##key_t##data_t##_node * tmp = 0;  \
 		cnrbtree_##key_t##data_t##_node * tmpnext = 0; \
-		cnrbtree_##key_t##data_t##_node * ret; \
 		tmp = tree->node; \
 		int cmp = 0; \
 		while( tmp != nil ) \
@@ -621,6 +615,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic_no
 			if( tmpnext == nil ) break; \
 			tmp = tmpnext; \
 		} \
+		cnrbtree_##key_t##data_t##_node * ret; \
 		ret = (cnrbtree_##key_t##data_t##_node * ) cnrbtree_generic_insert_repair_tree_with_fixup_primary( \
 			(cnrbtree_generic_node*)tmp, (cnrbtree_generic*)tree, \
 			cmp, (int)sizeof( cnrbtree_##key_t##data_t##_node ) ); \
