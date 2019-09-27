@@ -123,10 +123,12 @@
 #include <stdlib.h>
 #endif
 
+//For creating trees and nodes
 #ifndef CNRBTREE_MALLOC
 #define CNRBTREE_MALLOC malloc
 #endif
 
+//For freeing trees and nodes.
 #ifndef CNRBTREE_FREE
 #define CNRBTREE_FREE free
 #endif
@@ -157,7 +159,6 @@ typedef struct cnrbtree_generic_node_t
 	struct cnrbtree_generic_node_t * left;
 	struct cnrbtree_generic_node_t * right;
 	char color;
-	char nil;
 } cnrbtree_generic_node;
 
 struct cnrbtree_generic_t;
@@ -172,6 +173,7 @@ typedef struct cnrbtree_generic_t
 	struct cnrbtree_generic_node_t nil;
 } cnrbtree_generic;
 
+//TODO: Consider collapsing this down to one bit.  Black == 0.
 #define CNRBTREE_COLOR_NONE  0
 #define CNRBTREE_COLOR_RED   1
 #define CNRBTREE_COLOR_BLACK 2
@@ -350,7 +352,6 @@ CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_insert_repai
 	ret = CNRBTREE_MALLOC( sizetoalloc );
 
 	ret->color = CNRBTREE_COLOR_RED;
-	ret->nil = 0;
 	ret->left = &tree->nil;
 	ret->right = &tree->nil;
 	ret->parent = &tree->nil;
@@ -543,7 +544,6 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic_no
 		struct cnrbtree_##key_t##data_t##_node_t * left; \
 		struct cnrbtree_##key_t##data_t##_node_t * right; \
 		char color; \
-		char nil; \
 		key_t key; \
 		data_t data; \
 	} cnrbtree_##key_t##data_t##_node; \
@@ -664,7 +664,6 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic_no
 		ret->nil.left   = &ret->nil; \
 		ret->nil.right  = &ret->nil; \
 		ret->nil.color  = CNRBTREE_COLOR_BLACK; \
-		ret->nil.nil    = 1; \
 		return ret; \
 	}\
 
