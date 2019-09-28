@@ -1,3 +1,4 @@
+#include <string.h>
 #include "tcccrash.h"
 #include <os_generic.h>
 #include <stdio.h>
