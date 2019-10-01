@@ -162,7 +162,7 @@ void sighandler(int sig,  siginfo_t *info, struct sigcontext ctx)
 	}
 
 
-	printf( "**CRASH sighandler(%s) in ", thiscrash );
+	printf( "**CRASH sighandler(%s)\n", thiscrash );
 	tcccrashcheckpoint * cp = OGGetTLS( threadcheck );
 	if( !cp ) cp = &scratchcp;
 	if( cp->in_crash_handler == 1 )
@@ -186,17 +186,17 @@ void sighandler(int sig,  siginfo_t *info, struct sigcontext ctx)
 	#else
 	ip = ctx.oldmask; //not rip - not sure why
 	#endif
-	printf( "%p ", (void*)ip );
+	printf( "    %p\n", (void*)ip );
 	sel = tcccrash_symget( ip );
 	if( sel )
 	{
 		stp += sprintf( stp, "[%p] %s : %s(+0x%02x)\n", (void*)ip, sel->path, sel->name, (int)(intptr_t)(ip - sel->address) );
-		printf( "%s(+0x%02x)**\n", sel->name, (int)(intptr_t)(ip - sel->address) );
+		printf( "    %s(+0x%02x)**\n", sel->name, (int)(intptr_t)(ip - sel->address) );
 	}
 	else
 	{
 		stp += sprintf( stp, "[%p]\n", (void*)ip );
-		printf( "%p**\n", (void*)ip );
+		printf( "    %p**\n", (void*)ip );
 	}
 
 
@@ -233,7 +233,6 @@ void sighandler(int sig,  siginfo_t *info, struct sigcontext ctx)
 	}
 	printf( "Backtrace RSP: %p\n", rsp ); 
 	int btl = tccbacktrace((void**)btrace, MAXBTDEPTH, rsp );
-	printf( "==========================================%d [%p]\n", btl, rsp );
 	stp += sprintf( stp, "==========================================%d [%p]\n", btl, rsp );
 	for( i = 0; i < btl; i++ )
 	{
@@ -252,7 +251,7 @@ void sighandler(int sig,  siginfo_t *info, struct sigcontext ctx)
 
 		if( stp - stpstart > CRASHDUMPBUFFER - 1024 ) break; //Just in case it's waaay too long
 	}
-
+	printf( "Crash handler complete. Continuing execution\n" );
 finishup:
 	cp->in_crash_handler = 0;
 	if( cp->can_jump ) siglongjmp( cp->jmpbuf, sig );
@@ -292,13 +291,13 @@ static void SetupCrashHandler()
 	ss.ss_size = CRASHDUMPSTACKSIZE;
 	sigaltstack( &ss, 0);
 
-
 	sa.sa_flags   = SA_RESTART | SA_SIGINFO | SA_ONSTACK;
 	sigaction(SIGSEGV, &sa, NULL);
 	sigaction(SIGABRT, &sa, NULL);
 	sigaction(SIGFPE, &sa, NULL);
 	sigaction(SIGILL, &sa, NULL);
 	sigaction(SIGALRM, &sa, NULL); //Maybe have this to watchdog tcc tasks?
+	printf( "Sighandler installed.\n" );
 #ifdef SIGBUS
 	sigaction(SIGBUS, &sa, NULL);
 #endif
@@ -327,6 +326,7 @@ static int TCCCrashSymEnumeratorCallback( const char * path, const char * name, 
 
 void tcccrash_install()
 {
+	printf( "Running tcccrash_install()\n" );
 	scratchcp.signalstack = malloc( CRASHDUMPSTACKSIZE );
 	threadcheck = OGCreateTLS();
 	SetupCrashHandler();

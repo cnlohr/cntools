@@ -537,8 +537,16 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic_no
 		// We must affix the root node's ptr correctly.
 		while( (xp = x->parent), xp != nil ) { x = xp; }
 		T->node = x;
+
 		//End "RB-DELETE-FIXUP( T,x )"
 	}
+
+	if( T->size == 0 ) { 
+		T->node = nil;
+	}
+
+	cnrbtree_generic_update_begin_end( T );
+	return;
 }
 
 #endif // CNRBTREE_IMPLEMENTATION
