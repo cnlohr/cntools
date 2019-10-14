@@ -356,14 +356,13 @@ char * tcccrash_getcrash()
 void tcccrash_closethread()
 {
 	tcccrash_closethread_by_id( (tcccrashcheckpoint *)OGGetTLS( threadcheck ) );
+	OGSetTLS( threadcheck, 0 );
 }
 
 void tcccrash_closethread_by_id( tcccrashcheckpoint * cp )
 {
 	if( cp )
 	{
-		if( cp->lastcrash ) TCCCRASH_THREAD_FREE( cp->lastcrash );
-		if( cp->btrace ) TCCCRASH_THREAD_FREE( cp->btrace );
 		TCCCRASH_THREAD_FREE( cp );
 	}
 }
@@ -373,10 +372,11 @@ tcccrashcheckpoint * tcccrash_getcheckpoint()
 	tcccrashcheckpoint * cp = (tcccrashcheckpoint *)OGGetTLS( threadcheck );
 	if( cp == 0 )
 	{
-		cp = TCCCRASH_THREAD_MALLOC( sizeof( tcccrashcheckpoint ) );
+		//Allocae as one block.
+		cp = TCCCRASH_THREAD_MALLOC( sizeof( tcccrashcheckpoint ) + CRASHDUMPBUFFER + sizeof(void*) * MAXBTDEPTH );
 		memset( cp, 0, sizeof( tcccrashcheckpoint ) );
-		cp->lastcrash = TCCCRASH_THREAD_MALLOC( CRASHDUMPBUFFER );
-		cp->btrace = TCCCRASH_THREAD_MALLOC( sizeof(void*) * MAXBTDEPTH );
+		cp->lastcrash = (void*)(((uint8_t*)cp)+sizeof( tcccrashcheckpoint ));
+		cp->btrace = (void*)(((uint8_t*)cp)+sizeof( tcccrashcheckpoint )+CRASHDUMPBUFFER);
 		cp->can_jump = 1;	//XXX TODO: Should this be 0?
 		OGSetTLS( threadcheck, cp );
 	}
@@ -421,6 +421,8 @@ static void setup_symbols()
 //This consumes symadd, it will handle freeing it later.
 void tcccrash_symset( intptr_t tag, tcccrash_syminfo * symadd )
 {
+//	printf( "%p] %p %s\n", tag, symadd->address, symadd->name );
+
 	OGLockMutex( symroot_mutex );
 	ptrsimi tagptr = RBA( symroot, tag );
 	strsimi tagptr_name = RBA( symroot_name, tag );
@@ -455,10 +457,12 @@ tcccrash_syminfo * tcccrash_symget( intptr_t address )
 	intptr_t mindiff = 0;
 	RBFOREACH( ptrptrsimi, symroot, i )
 	{
-		cnrbtree_ptrsimi_node * n = cnrbtree_ptrsimi_get2( i->data, address, 1 );
+		cnrbtree_ptrsimi * d = i->data;
+		cnrbtree_ptrsimi_node * n = cnrbtree_ptrsimi_get2( d, address, 1 );
+		if( !n || n == &d->nil ) continue;
 		if( n->data->address > address )
-			n = (void*)cnrbtree_generic_prev( (cnrbtree_generic*)i->data, (void*)n );
-		if( !n ) continue;
+			n = (void*)cnrbtree_generic_prev( (cnrbtree_generic*)d, (void*)n );
+		if( !n || n == &d->nil ) continue;
 		intptr_t diff = address - n->data->address;
 		if( mindiff == 0 || ( diff < mindiff && diff < n->data->size + 16 ) )
 		{

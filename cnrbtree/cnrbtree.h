@@ -710,6 +710,10 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic_no
 #define RBnullop(x,y)
 #define RBCBPTR RBptrcmp, RBptrcpy
 
+#ifndef CNRBTREE_NO_SETTYPES
+
+#include <string.h>
+
 //Code for pointer-sets (cnptrset) - this is only for void *
 typedef void * rbset_t;
 typedef char rbset_null_t[0];
@@ -724,11 +728,34 @@ typedef cnrbtree_rbset_trbset_null_t cnptrset;
 #define cnptrset_insert( st, key ) cnrbtree_rbset_trbset_null_t_access( st, key )
 #define cnptrset_remove( st, key ) cnrbtree_rbset_trbset_null_t_remove( st, key )
 #define cnptrset_destroy( st ) cnrbtree_rbset_trbset_null_t_destroy( st )
-//Note, you need a pre-defined void * for the type in the iteration. i.e. cnptrfset_foreach( tree, i );
+//Note, you need a pre-defined void * for the type in the iteration. i.e. void * i; cnptrfset_foreach( tree, i );
 #define cnptrset_foreach( tree, i ) \
 	for( cnrbtree_rbset_trbset_null_t_node * node##i = tree->begin; \
 		i = (node##i)->key, node##i != &tree->nil; \
 		node##i = (cnrbtree_rbset_trbset_null_t_node *)cnrbtree_generic_next( (cnrbtree_generic*)tree, (cnrbtree_generic_node *)node##i ) )
+
+
+
+//Code for string-sets (cnstrset) - this is only for void *
+typedef char * rbstrset_t;
+#ifdef CNRBTREE_IMPLEMENTATION
+	CNRBTREETEMPLATE( rbstrset_t, rbset_null_t, RBstrcmp, RBstrcpy, RBnullop );
+#else
+	CNRBTREETEMPLATE_DEFINITION( rbstrset_t, rbset_null_t, RBptrcmp, RBptrcpy, RBstrdel );
+#endif
+
+typedef cnrbtree_rbstrset_trbset_null_t cnstrset;
+#define cnstrset_create() cnrbtree_rbstrset_trbset_null_t_create()
+#define cnstrset_insert( st, key ) cnrbtree_rbstrset_trbset_null_t_access( st, key )
+#define cnstrset_remove( st, key ) cnrbtree_rbstrset_trbset_null_t_remove( st, key )
+#define cnstrset_destroy( st ) cnrbtree_rbstrset_trbset_null_t_destroy( st )
+//Note, you need a pre-defined char * for the type in the iteration. i.e. char * i; cnstrfset_foreach( tree, i );
+#define cnstrset_foreach( tree, i ) \
+	for( cnrbtree_rbstrset_trbset_null_t_node * node##i = tree->begin; \
+		i = (node##i)->key, node##i != &tree->nil; \
+		node##i = (cnrbtree_rbstrset_trbset_null_t_node *)cnrbtree_generic_next( (cnrbtree_generic*)tree, (cnrbtree_generic_node *)node##i ) )
+
+#endif
 
 #endif
 
