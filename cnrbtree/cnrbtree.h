@@ -149,7 +149,7 @@
 //Shorthand for red-black access, and typesafe deletion.
 #ifndef NO_RBA
 #define RBA(x,y) (x->access)( x, y )->data
-#define RBHAS(x,y) ((x->get)( x, y ) == x->nil))
+#define RBHAS(x,y) ((x->get)( x, y ))
 #define RBDESTROY(x) (x->destroy)( x )
 #define RBFOREACH( type, tree, i ) for( cnrbtree_##type##_node * i = tree->begin; i != &tree->nil; i = (cnrbtree_##type##_node *)cnrbtree_generic_next( (cnrbtree_generic*)tree, (cnrbtree_generic_node *)i ) )
 #endif
@@ -709,7 +709,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic_no
 #define RBstrdel(x,y) free( x );
 #define RBCBSTR RBstrcmp, RBstrcpy, RBstrdel
 
-#define RBptrcmp(x,y) (x-y)
+#define RBptrcmp(x,y) ((x==y)?0:(((x-y)<0)?-1:1))
 #define RBptrcpy(x,y,z) { x = y; }
 #define RBnullop(x,y)
 #define RBCBPTR RBptrcmp, RBptrcpy
