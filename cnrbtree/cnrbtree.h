@@ -149,6 +149,7 @@
 //Shorthand for red-black access, and typesafe deletion.
 #ifndef NO_RBA
 #define RBA(x,y) (x->access)( x, y )->data
+#define RBHAS(x,y) ((x->get)( x, y ) == x->nil))
 #define RBDESTROY(x) (x->destroy)( x )
 #define RBFOREACH( type, tree, i ) for( cnrbtree_##type##_node * i = tree->begin; i != &tree->nil; i = (cnrbtree_##type##_node *)cnrbtree_generic_next( (cnrbtree_generic*)tree, (cnrbtree_generic_node *)i ) )
 #endif
@@ -168,6 +169,7 @@ typedef struct cnrbtree_generic_t
 	struct cnrbtree_generic_node_t * node;
 	int size;
 	cnrbtree_generic_node * (*access)( struct cnrbtree_generic_t * tree, void * key );
+	cnrbtree_generic_node * (*get)( struct cnrbtree_generic_t * tree, void * key );
 	void (*destroy)( struct cnrbtree_generic_t * tree );
 	cnrbtree_generic_node * begin;
 	cnrbtree_generic_node * tail;
@@ -570,6 +572,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic_no
 		cnrbtree_##key_t##data_t##_node * node; \
 		int size; \
 		cnrbtree_##key_t##data_t##_node * (*access)( struct cnrbtree_##key_t##data_t##_t * tree, key_t key ); \
+		cnrbtree_##key_t##data_t##_node * (*get)( struct cnrbtree_##key_t##data_t##_t * tree, key_t key ); \
 		void (*destroy)( struct cnrbtree_##key_t##data_t##_t * tree ); \
 		cnrbtree_##key_t##data_t##_node * begin; \
 		cnrbtree_##key_t##data_t##_node * tail; \
@@ -677,6 +680,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic_no
 		ret->begin = (cnrbtree_##key_t##data_t##_node *)&ret->nil; \
 		ret->size = 0; \
 		ret->access = cnrbtree_##key_t##data_t##_access; \
+		ret->get = cnrbtree_##key_t##data_t##_get; \
 		ret->destroy = cnrbtree_##key_t##data_t##_destroy; \
 		ret->nil.parent = &ret->nil; \
 		ret->nil.left   = &ret->nil; \
@@ -739,7 +743,7 @@ typedef cnrbtree_rbset_trbset_null_t cnptrset;
 //Code for string-sets (cnstrset) - this is only for void *
 typedef char * rbstrset_t;
 #ifdef CNRBTREE_IMPLEMENTATION
-	CNRBTREETEMPLATE( rbstrset_t, rbset_null_t, RBstrcmp, RBstrcpy, RBnullop );
+	CNRBTREETEMPLATE( rbstrset_t, rbset_null_t, RBstrcmp, RBstrcpy, RBstrdel );
 #else
 	CNRBTREETEMPLATE_DEFINITION( rbstrset_t, rbset_null_t, RBptrcmp, RBptrcpy, RBstrdel );
 #endif
