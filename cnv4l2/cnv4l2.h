@@ -28,6 +28,7 @@ typedef enum
 struct cnv4l2_t;
 
 typedef void (*cnv4l2callback)( struct cnv4l2_t * match, uint8_t * payload, int payloadlen );
+typedef void (*cnv4l2enumcb)( void * opaque, const char * dev, const char * name, const char * bus );
 
 struct cnv4l2_t
 {
@@ -35,6 +36,7 @@ struct cnv4l2_t
 	cnv4l2mode mode;
 	cnv4l2format fmt;
 	int w, h;
+	void * opaque;
 	cnv4l2callback callback;
 	uint32_t buffersize;
 	uint32_t nbuffers;
@@ -42,6 +44,8 @@ struct cnv4l2_t
 };
 
 typedef struct cnv4l2_t cnv4l2;
+
+int cnv4l2_enumerate( void * opaque, cnv4l2enumcb cb );
 
 cnv4l2 * cnv4l2_open( const char * path, int w, int h, cnv4l2format fmt, cnv4l2mode mode, cnv4l2callback cb );
 int cnv4l2_set_framerate( cnv4l2 * v, int num, int denom );

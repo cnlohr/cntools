@@ -20,6 +20,25 @@
 
 #define CLEAR(x) memset(&(x), 0, sizeof(x))
 
+int cnv4l2_enumerate( void * opaque, cnv4l2enumcb cb )
+{
+    struct v4l2_capability video_cap;
+	int camcount = 0;
+	int i;
+	for( i = 0; i < 64; i++ )
+	{
+		char cts[64];
+		sprintf( cts, "/dev/video%d", i );
+		int fd = open( cts, O_RDONLY );
+		if( fd < 0 ) continue;
+	    if( ioctl(fd, VIDIOC_QUERYCAP, &video_cap) == -1) continue;
+		if (!(video_cap.capabilities & V4L2_CAP_VIDEO_CAPTURE)) continue;
+
+		cb( opaque, cts, video_cap.card, video_cap.bus_info );
+		close( fd );
+	}
+	return camcount;
+}
 
 cnv4l2 * cnv4l2_open( const char * path, int w, int h, cnv4l2format fmt, cnv4l2mode mode, cnv4l2callback cb )
 {
