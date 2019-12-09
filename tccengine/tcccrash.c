@@ -179,12 +179,34 @@ void sighandler(int sig,  siginfo_t *info, struct sigcontext ctx)
 	void ** btrace = cp->btrace;
 	int i;
 
+#ifdef __aarch64__
+	printf( "FA: %p / SP: %p / PC: %p / PS: %p\n", ctx.fault_address, ctx.sp, ctx.pc, ctx.pstate );
+	for( i = 0; i < 31; i++ )
+	{
+		intptr_t ip = ctx.regs[i];
+                sel = tcccrash_symget( ip );
+                ip = (intptr_t)btrace[i];
+                if( sel )
+                {
+                        printf( "%2d [%p] %s : %s(+0x%02x)\n", i, (void*)ip, sel->path, sel->name, (int)(intptr_t)(ip-sel->address) );
+                        stp += sprintf( stp, "%2d [%p] %s : %s(+0x%02x)\n", i, (void*)ip, sel->path, sel->name, (int)(intptr_t)(ip-sel->address) );
+                }
+                else
+                {
+                        printf( "%2d [%p]\n", i, (void*)ip );
+                        stp += sprintf( stp, "%2d [%p]\n", i, (void*)ip );
+                }
+	}
+#endif
+
 	//https://www.linuxjournal.com/files/linuxjournal.com/linuxjournal/articles/063/6391/6391l2.html
 	intptr_t ip;
 	#ifdef __i386__
 	ip = ctx.oldmask; //not eip - not sure why
-	#else
+	#elif __x86_64__
 	ip = ctx.oldmask; //not rip - not sure why
+	#else
+	ip = ctx.fault_address; //Not sure what we can get here
 	#endif
 	printf( "    %p\n", (void*)ip );
 	sel = tcccrash_symget( ip );
@@ -218,11 +240,20 @@ void sighandler(int sig,  siginfo_t *info, struct sigcontext ctx)
 #endif
 	puts( stpstart );
 	//int btl = backtrace( (void**)btrace, MAXBTDEPTH );
+#ifdef __aarch64__
+	void * rsp = (void*)ctx.sp;
+#else
 	void * rsp = (void*)ctx.rsp;
+#endif
+
 	if( rsp < (void*)0x40000 )
 	{
 		//rsp broken.  Try RBP
+#ifdef __aarch64__
+		rsp = (void*)ctx.regs[1];
+#else
 		rsp = (void*)ctx.rbp;
+#endif
 	}
 	if( rsp < (void*)0x400000 )
 	{
