@@ -1,7 +1,7 @@
 //Copyright <>< 2019 Charles Lohr, distributed without restriction.
 //based on https://gist.github.com/maxlapshin/1253534, which may be distributed without restriction.
 
-#include <cnv4l2.h>
+#include "cnv4l2.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -51,6 +51,7 @@ cnv4l2 * cnv4l2_open( const char * path, int w, int h, cnv4l2format fmt, cnv4l2m
 	}
 
 	//Step 2: Make sure we have a special device.
+#ifndef CNV4L2_NOSTAT
 	struct stat st;
 	if ( -1 == stat( path, &st ) )
 	{
@@ -62,6 +63,7 @@ cnv4l2 * cnv4l2_open( const char * path, int w, int h, cnv4l2format fmt, cnv4l2m
 		fprintf(stderr, "Device type error %s is no device\n", path);
 		goto failure;
 	}
+#endif
 	v = malloc( sizeof( cnv4l2 ) );
 	v->fd = 0;
 	v->mode = mode;
@@ -140,7 +142,7 @@ cnv4l2 * cnv4l2_open( const char * path, int w, int h, cnv4l2format fmt, cnv4l2m
 
 			if (-1 == ioctl(fd, VIDIOC_S_FMT, &fmtt))
 			{
-				fprintf( stderr, "Error: %s: Cannot set format for H264 video stream\n", path );
+				fprintf( stderr, "Error: %s: Cannot set format %d for video stream\n", path, fmt );
 				/* Note VIDIOC_S_FMT may change width and height. */
 				goto failure;
 			}

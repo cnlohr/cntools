@@ -342,6 +342,7 @@ static void setup_symbols();
 
 static int TCCCrashSymEnumeratorCallback( const char * path, const char * name, void * location, long size )
 {
+	//printf( "%s / %s / %p / %d\n", path, name, location, size );
 	if( !name || strlen(name) < 1 ) return 0;
 	tcccrash_syminfo * sn = malloc( sizeof( tcccrash_syminfo ) );
 	memset( sn, 0, sizeof( *sn ) );
@@ -509,6 +510,7 @@ static tcccrash_syminfo * dupsym( const char * name, const char * path )
 {
 	tcccrash_syminfo * ret = malloc( sizeof( tcccrash_syminfo ) );
 	memset( ret, 0, sizeof( *ret ) );
+	//printf( "DUPSYM: %s %s\n", name, path );
 	ret->name = strdup( name );
 	ret->path = strdup( path );
 	return ret;

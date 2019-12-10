@@ -159,7 +159,7 @@ static int callback(struct dl_phdr_info *info,
 	if (info->dlpi_name && info->dlpi_name[0])
 		libpath = info->dlpi_name;
 	else
-		libpath = "";
+		libpath = "???";
 
 	libname = strrchr(libpath, '/');
 
