@@ -89,7 +89,11 @@ LONG WINAPI windows_exception_handler(EXCEPTION_POINTERS * ExceptionInfo)
 		tcccrash_syminfo * sel = tcccrash_symget( (intptr_t)pel );
 		if( sel )
 		{
-			stp += sprintf( stp, "[%p] %s : %s(+0x%02x)\n", (void*)pel, sel->path, sel->name, (int)(pel-sel->size) );
+			int delta = ((uint8_t*)pel-(uint8_t*)sel->address);
+			if( delta < (sel->size + 0xffff) )
+				stp += sprintf( stp, "[%p] %s : %s (+0x%02x)%s\n", (void*)pel, sel->path, sel->name, (int)delta, (delta>(sel->size+128))?" DUBIOUS":"" );
+			else
+				stp += sprintf( stp, "[%p] ????\n", (void*)pel );
 		}
 		else
 		{
@@ -516,6 +520,8 @@ static tcccrash_syminfo * dupsym( const char * name, const char * path )
 	return ret;
 }
 
+#ifndef NO_INTERNAL_TCC_SYM_MONITOR
+
 #include <tinycc/tcc.h>
 
 void tcccrash_symtcc( const char * file, TCCState * state )
@@ -552,4 +558,5 @@ fail:
 }
 
 
+#endif
 
