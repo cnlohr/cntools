@@ -42,13 +42,13 @@
        int myvalue;
      } object;
      typedef char * str;
-     CNRBTREETEMPLATE( str, int, RBstrcmp, RBstrcpy, RBstrdel );
+     CNRBTREETEMPLATE( str, object, RBstrcmp, RBstrcpy, RBstrdel );
 
   This will define a tree which uses strings to index.  You can then create
   these types.  I.e.
 
      //Constructs the tree
-     cnrbtree_strint * tree = cnrbtree_strint_create();
+     cnrbtree_strint * tree = cnrbtree_strobject_create();
 
      //Accesses, like C++ map's [] operator.
      RBA( tree, "a" ).myvalue = 5;
@@ -68,6 +68,7 @@
      //Typesafe delete.
      RBDESTROY( tree );
 
+  You can also just do strint, and it will use strings as the index, and integers as the payload.
 
   Also provided: cnptrset - for a set-type data structure.  It is actually
      a cnrbtree_rbset_trbset_null_t and can be used as such.  This looks odd
