@@ -62,7 +62,7 @@
      //Iterate through them all.
      RBFOREACH( str_payload, tree, i )
      {
-         printf( ".key = %s .myvalue = %d\n", i->key, i-data.myvalue );
+         printf( ".key = %s .myvalue = %d\n", i->key, i->data.myvalue );
      }
 
      //Typesafe delete.
