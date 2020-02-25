@@ -88,7 +88,7 @@ int EnumerateSymbols( SymEnumeratorCallback cb )
 
 #define UINTS_PER_WORD (__WORDSIZE / (CHAR_BIT * sizeof (unsigned int)))
 
-
+#ifndef ANDROID
     struct dl_phdr_info {
         ElfW(Addr)        dlpi_addr;  /* Base address of object */
         const char       *dlpi_name;  /* (Null-terminated) name of
@@ -98,10 +98,8 @@ int EnumerateSymbols( SymEnumeratorCallback cb )
                                          for this object */
         ElfW(Half)        dlpi_phnum; /* # of items in dlpi_phdr */
     };
-
-
-
-void dl_iterate_phdr( void*, void*);
+	void dl_iterate_phdr( void*, void*);
+#endif
 
 
 static ElfW(Word) gnu_hashtab_symbol_count(const unsigned int *const table)
