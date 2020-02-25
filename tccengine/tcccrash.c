@@ -127,7 +127,7 @@ static void UnsetCrashHandler()
 
 #ifndef ANDROID
 #include <execinfo.h>
-#else
+#endif
 
 //Backtrace code closely modeled after the code here:
 // https://stackoverflow.com/questions/47609816/get-backtrace-under-tiny-c
