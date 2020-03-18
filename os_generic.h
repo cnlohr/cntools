@@ -75,7 +75,7 @@
 */
 
 
-#if defined( OSG_NOSTATIC ) && OSG_STATIC != 0
+#if defined( OSG_NOSTATIC ) && OSG_NOSTATIC != 0
 #ifndef OSG_PREFIX
 #define OSG_PREFIX
 #endif
@@ -98,6 +98,10 @@ typedef void* og_mutex_t;
 typedef void* og_sema_t;
 typedef void* og_tls_t;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 OSG_PREFIX void OGSleep( int is );
 OSG_PREFIX void OGUSleep( int ius );
 OSG_PREFIX double OGGetAbsoluteTime();
@@ -118,6 +122,10 @@ OSG_PREFIX og_tls_t OGCreateTLS();
 OSG_PREFIX void OGDeleteTLS( og_tls_t key );
 OSG_PREFIX void * OGGetTLS( og_tls_t key );
 OSG_PREFIX void OGSetTLS( og_tls_t key, void * data );
+
+#ifdef __cplusplus
+};
+#endif
 
 #ifndef OSG_NO_IMPLEMENTATION
 
@@ -373,18 +381,20 @@ OSG_PREFIX void * OGJoinThread( og_thread_t ot )
 	return retval;
 }
 
-#ifndef ANDROID
 OSG_PREFIX void OGCancelThread( og_thread_t ot )
 {
 	if( !ot )
 	{
 		return;
 	}
-	pthread_cancel( *(pthread_t*)ot );
+#ifdef ANDROID
+	pthread_kill( *(pthread_t*)ot, SIGTERM );
+#else
+	thread_cancel( *(pthread_t*)ot );
+#endif
 	OSG_TERM_THREAD_CODE
 	free( ot );
 }
-#endif
 
 OSG_PREFIX og_mutex_t OGCreateMutex()
 {

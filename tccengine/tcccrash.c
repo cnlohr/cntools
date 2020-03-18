@@ -124,7 +124,10 @@ static void UnsetCrashHandler()
 
 #include <pthread.h>
 #include <signal.h>
+
+#ifndef ANDROID
 #include <execinfo.h>
+#endif
 
 //Backtrace code closely modeled after the code here:
 // https://stackoverflow.com/questions/47609816/get-backtrace-under-tiny-c
@@ -132,6 +135,10 @@ static void UnsetCrashHandler()
 //		asm ("mov %%rbp, %0;" : "=r" (bp));
 
 int tccbacktrace(void **buffer, int size, void * specbp) {
+#ifdef ANDROID
+	buffer[0] = 0;
+	return 0;
+#else
     extern intptr_t *__libc_stack_end;
     intptr_t **p, *bp, *frame;
 	bp = specbp;
@@ -146,6 +153,7 @@ int tccbacktrace(void **buffer, int size, void * specbp) {
         p = (intptr_t**) frame;
     }
     return i;
+#endif
 }
 
 void sighandler(int sig,  siginfo_t *info, struct sigcontext ctx)
@@ -313,7 +321,7 @@ static void SetupCrashHandler()
 	void * v;
 	//This forces a library-load for the backtrace() function to stop it from
 	//malloc'ing in runtime.
-	backtrace( &v, 1); 
+	//backtrace( &v, 1); 
 
     struct sigaction sa;
     memset(&sa, 0, sizeof(struct sigaction));
