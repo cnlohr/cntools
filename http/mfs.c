@@ -76,11 +76,11 @@ int8_t MFSOpenFile( const char * fname, struct MFSFileInfo * mfi )
 		snprintf( targfile, sizeof( targfile ) - 1, "page/%s", fname );
 	}
 
-	printf( ":%s:\n", targfile );
+	//printf( ":%s:\n", targfile );
 
 	FILE * f = mfi->file = fopen( targfile, "rb" );
 	if( f <= 0 ) return -1;
-	printf( "F: %p\n", f );
+	//printf( "F: %p\n", f );
 	fseek( f, 0, SEEK_END );
 	mfi->filelen = ftell( f );
 	fseek( f, 0, SEEK_SET );

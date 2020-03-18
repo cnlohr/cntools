@@ -220,6 +220,10 @@ void  HTTPHandleInternalCallback( )
 		//TODO: Content Length?  MIME-Type?
 		PushString("HTTP/1.1 200 Ok\r\n");
 
+#ifdef CUSTOM_HTTPHEADER_CODE
+		CUSTOM_HTTPHEADER_CODE
+#endif
+
 		if( curhttp->bytesleft < 0xfffffffe )
 		{
 			PushString("Connection: "ISKEEPALIVE"\r\nContent-Length: ");
