@@ -710,7 +710,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic_no
 #define RBstrdel(x,y) free( x );
 #define RBCBSTR RBstrcmp, RBstrcpy, RBstrdel
 
-#define RBptrcmp(x,y) ((x==y)?0:(((x-y)<0)?-1:1))
+#define RBptrcmp(x,y) ((x==y)?0:((((intptr_t)x-(intptr_t)y)<0)?-1:1))
 #define RBptrcpy(x,y,z) { x = y; }
 #define RBnullop(x,y)
 #define RBCBPTR RBptrcmp, RBptrcpy
