@@ -120,7 +120,6 @@
 
 //XXX TODO: Consider optimizations and pulling even more things out of the templated code into the regular code.
 
-
 #if !defined( CNRBTREE_MALLOC ) || !defined( CNRBTREE_FREE )
 #include <stdlib.h>
 #endif
@@ -707,8 +706,11 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic_no
 
 #define RBstrcmp(x,y) strcmp(x,y)
 #define RBstrcpy(x,y,z) { x = strdup(y); }
+#define RBstrstrcpy(x,y,z) { x = strdup(y); z = 0; }
 #define RBstrdel(x,y) free( x );
+#define RBstrstrdel( x,z ) { free(x); free(z); }
 #define RBCBSTR RBstrcmp, RBstrcpy, RBstrdel
+
 
 #define RBptrcmp(x,y) ((x==y)?0:((((intptr_t)x-(intptr_t)y)<0)?-1:1))
 #define RBptrcpy(x,y,z) { x = y; }
@@ -745,8 +747,10 @@ typedef cnrbtree_rbset_trbset_null_t cnptrset;
 typedef char * rbstrset_t;
 #ifdef CNRBTREE_IMPLEMENTATION
 	CNRBTREETEMPLATE( rbstrset_t, rbset_null_t, RBstrcmp, RBstrcpy, RBstrdel );
+	CNRBTREETEMPLATE( rbstrset_t, rbstrset_t, RBstrcmp, RBstrstrcpy, RBstrstrdel );
 #else
 	CNRBTREETEMPLATE_DEFINITION( rbstrset_t, rbset_null_t, RBptrcmp, RBptrcpy, RBstrdel );
+	CNRBTREETEMPLATE_DEFINITION( rbstrset_t, rbstrset_t, RBstrcmp, RBstrstrcpy, RBstrstrdel );
 #endif
 
 typedef cnrbtree_rbstrset_trbset_null_t cnstrset;
@@ -759,6 +763,18 @@ typedef cnrbtree_rbstrset_trbset_null_t cnstrset;
 	for( cnrbtree_rbstrset_trbset_null_t_node * node##i = tree->begin; \
 		i = (node##i)->key, node##i != &tree->nil; \
 		node##i = (cnrbtree_rbstrset_trbset_null_t_node *)cnrbtree_generic_next( (cnrbtree_generic*)tree, (cnrbtree_generic_node *)node##i ) )
+
+
+typedef cnrbtree_rbstrset_trbstrset_t cnstrstrmap;
+#define cnstrstrmap_create() cnrbtree_rbstrset_trbstrset_t_create()
+#define cnstrstrmap_insert( st, key ) cnrbtree_rbstrset_trbstrset_t_access( st, key )
+#define cnstrstrmap_remove( st, key ) cnrbtree_rbstrset_trbstrset_t_remove( st, key )
+#define cnstrstrmap_destroy( st ) cnrbtree_rbstrset_trbstrset_t_destroy( st )
+//Note, you need a pre-defined char * for the type in the iteration. i.e. char * i; cnstrfset_foreach( tree, i );
+#define cnstrstrmap_foreach( tree, i ) \
+	for( cnrbtree_rbstrset_trbstrset_t_node * node##i = tree->begin; \
+		i = (node##i)->key, node##i != &tree->nil; \
+		node##i = (cnrbtree_rbstrset_trbstrset_t_node *)cnrbtree_generic_next( (cnrbtree_generic*)tree, (cnrbtree_generic_node *)node##i ) )
 
 #endif
 
