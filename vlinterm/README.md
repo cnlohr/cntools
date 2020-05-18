@@ -1,4 +1,1 @@
-# WARNING
-
-DO NOT USE THIS PROJECT - IT DOES NOT WORK.
-
+# An ANSI / VT-100 / Linux compatible terminal system
