@@ -483,8 +483,13 @@ int cnv4l2_set_framerate( cnv4l2 * v, int num, int denom )
 
 void cnv4l2_close( cnv4l2 * v )
 {
-	if( v->fd ) close( v->fd );
+	if( v->fd )
 	{
+		enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+		ioctl(v->fd, VIDIOC_STREAMOFF, &type);
+		usleep(10000);
+		close( v->fd );
+		printf( "CLOSED V4L2: %d\n", v->fd );
 		int i;
 		for( i = 0; i < v->nbuffers; i++ )
 		{
