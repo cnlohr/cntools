@@ -209,7 +209,6 @@ struct cnhttpclientresponse * CNHTTPClientTransact( struct cnhttpclientrequest *
 				{
 					ischunked = 1;
 				}
-
 				currentcontent += responselength - k;
 				//puts( ret->fullheader );
 				if( responsecode == 101 && is_websocket ) break;
@@ -222,10 +221,10 @@ struct cnhttpclientresponse * CNHTTPClientTransact( struct cnhttpclientrequest *
 		}
 
 		response = realloc( response, responselength + 8192 );
-
 	}
 
 	ret->code = responsecode;
+	ret->payloadlen = 0;
 	if( ischunked )
 	{
 		ret->payload = malloc( currentcontent + 1);
@@ -247,14 +246,19 @@ struct cnhttpclientresponse * CNHTTPClientTransact( struct cnhttpclientrequest *
 			if( chunklen == 0 ) break;
 			// it's on a \r.  advance.
 			splpl+=1;
+
 			if( splpl - ospl + chunklen >= currentcontent ) break;
 			memcpy( ret->payload + payloadpl, splpl, chunklen );
 			payloadpl += chunklen;
+			splpl += chunklen + 2;
 		} while( 1 );
+
 		ret->payload[payloadpl] = 0;
 		ret->payloadlen = payloadpl;
 	}
-	else
+
+	//XXX Hack: Some webservers will say "chunked" but they don't really mean it.
+	if( ret->payloadlen == 0 )
 	{
 		ret->payload = malloc( currentcontent + 1);
 		ret->payload[currentcontent] = 0;
@@ -263,6 +267,7 @@ struct cnhttpclientresponse * CNHTTPClientTransact( struct cnhttpclientrequest *
 	}
 	free( response );
 
+//	printf( "RESP: %s %d %d %d\n", ret->payload, responselength, ret->payloadlen, ischunked );
 	if( is_websocket )
 	{
 		ret->underlying_connection = c;
@@ -350,13 +355,13 @@ int CNHTTPClientWSRecv( struct cnhttpclientresponse * conn, char * data, int len
 	int buffoffset = 0;
 	do
 	{
-		printf( "RXING\n" );
 		uint16_t ret = CNSSLRead( conn->underlying_connection, buff + buffoffset, buffoffset + 8192 );
 		if( ret <= 0 )
 		{
 			CNSSLClose( conn->underlying_connection );
 			return -1;
 		}
+		/*
 		int k;
 		printf( "R %d: ", ret );
 		for( k = 0; k < ret; k++ )
@@ -364,7 +369,7 @@ int CNHTTPClientWSRecv( struct cnhttpclientresponse * conn, char * data, int len
 			printf( "%02x %c ", (buff + buffoffset)[k], (buff + buffoffset)[k] );
 		}
 		printf( "\n" );
-
+		*/
 		if( ret < 0 ) return ret;
 		buffoffset += ret;
 		buff = realloc( buff, buffoffset + 8192 );
