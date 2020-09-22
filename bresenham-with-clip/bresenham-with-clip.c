@@ -32,6 +32,7 @@ void BresenPixel( int x, int y )
 
 void BresenhamDrawLineWithClip( int x0, int y0, int x1, int y1 )
 {
+	printf( "\n" );
 	int dx = (x1-x0);
 	int dy = (y1-y0);
 	int sdx = (dx>0)?1:-1;
@@ -62,20 +63,72 @@ void BresenhamDrawLineWithClip( int x0, int y0, int x1, int y1 )
 	printf( "Entering: (%d %d) -> (%d %d)\n", x, y, x1, y1 );
 	if( x < 0 )
 	{
-		int dx = 0 - x;
-		y += (yerrnumerator * dx)/256;
+		int dxA = 0 - x;
+		int yn = (yerrnumerator * dxA+128)/256*sdy;
+		y += yn/256*sdy;
+		yerr = yn % 256;
 		x = 0;
+		printf( "A <%d %d>\n", sdx, sdy ); // 1 -1 BAD  1,1 bad. <1 -1> BAD 1,1 BAD. 
 	}
-
 	if( x > BRESEN_W-1 )
 	{
-		int dx = x - (BRESEN_W-1);
-		y -= (yerrnumerator * dx)/256;
+		int dxA = x - (BRESEN_W-1);
+		int yn = (yerrnumerator * dxA+128)/256*sdy;
+		y -= yn/256*sdy;
+		yerr = yn % 256;
 		x = BRESEN_W-1;
+		printf( "B <%d %d>\n", sdx, sdy );	//<-1,-1>BADx4  <-1 1> BAD /// B <-1 -1> BUT NOTE D.
 	}
+
+	if( sdy > 0 )
+	{
+		if( y > BRESEN_H-1 ) return;
+	//	if( y > y1 ) return;
+	}
+	else
+	{
+		if( y < 0 ) return;
+	//	if( y < y1 ) return;
+	}
+
+	printf( "Now at: %d %d\n", x, y );
+
+	if( y < 0 )
+	{
+		int xerrnumerator = (dx * sdx) * 256 / ( dy * sdy );
+		int dyA = 0 - y;
+		x += (xerrnumerator * dyA+128)/256*sdx;
+		y = 0;
+		printf( "C %d %d  %d %d  <%d %d>\n", x, y, dyA, xerrnumerator, sdx, sdy ); //-1,1 ok  1,1 WRONG.
+	}
+	if( y > BRESEN_H-1 )
+	{
+		int xerrnumerator = (dx * sdx) * 256 / ( dy * sdy );
+		int dyA = y - (BRESEN_H-1);
+		x += (xerrnumerator * dyA+128)/256*sdx;
+		y = BRESEN_H-1;
+		printf( "D %d %d   %d %d <%d %d>\n", x, y, dyA, xerrnumerator, sdx, sdy ); //1,-1 ok -1, -1 wrong
+	}
+
+	//D flipped: D 278 239   51 207 <-1 -1> ALSO HAS B
+
+
+	if( sdx > 0 )
+	{
+		if( x > BRESEN_W-1 ) return;
+		if( x > x1 ) return;
+	}
+	else
+	{
+		if( x < 0 ) return;
+		if( x < x1 ) return;
+	}
+
 
 	if( x1 < 0 ) x1 = 0;
 	if( x1 > BRESEN_W-1) x1 = BRESEN_W-1;
+	if( y1 < 0 ) y1 = 0;
+	if( y1 > BRESEN_H-1) y1 = BRESEN_H-1;
 
 	printf( "LEAVING: %d %d -> %d %d (%d %d)\n", x, y, x1, y1, sdx, sdy );
 
@@ -86,10 +139,12 @@ void BresenhamDrawLineWithClip( int x0, int y0, int x1, int y1 )
 		while( yerr > 255 )
 		{
 			y += sdy;
+			if( y == y1 ) goto complete;
 			BresenPixel( x, y );
 			yerr -= 256;
 		}
 	}
+complete:
 	BresenPixel( x, y );
 
 
@@ -270,10 +325,11 @@ int main()
 			int y1 = rand()%maxy;
 
 			CNFGColor( 0xff00ff );
-			CNFGTackSegment( x0, y0, x1, y1 );
-			CNFGTackSegment( x0+1, y0, x1+1, y1 );
-			CNFGTackSegment( x0, y0+1, x1, y1+1 );
-			CNFGTackSegment( x0+1, y0+1, x1+1, y1+1 );
+			int dx, dy;
+			for( dy = -1; dy <= 1; dy ++) for( dx = -1; dx <= 1; dx++ )
+			{
+				CNFGTackSegment( x0+dx, y0+dy, x1+dx, y1+dy );
+			}
 
 			CNFGColor( 0x00ff00 );
 			BresenhamDrawLineWithClip( x0 - BRESEN_W/2, y0 - BRESEN_H/2, x1 - BRESEN_W/2, y1 - BRESEN_H/2 );
