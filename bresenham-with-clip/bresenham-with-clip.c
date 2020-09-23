@@ -1,6 +1,3 @@
-//
-//XXX WARNING THIS FILE IS CURRENTLY BROKEN REVIEW LATER
-
 /*
 	This is my algorithm for using Bresenham's line algorithm with clipping.
 	This makes it possibel to speed along very quickly without having to check
@@ -66,170 +63,164 @@ void BresenhamDrawLineWithClip( int x0, int y0, int x1, int y1 )
 //#define BRESEN_H OLED_HEIGHT
 #define FIXEDPOINT 16
 #define FIXEDPOINTD2 15
-	int dx = (x1-x0);
-	int dy = (y1-y0);
-	int sdx = (dx>0)?1:-1;
-	int sdy = (dy>0)?1:-1;
-	int yerrdiv = ( dx * sdx );  //dy, but always positive.
-	int xerrdiv = ( dy * sdy );  //dx, but always positive.
-	int yerrnumerator = 0;
-	int xerrnumerator = 0;
-	int x = x0;
-	int y = y0;
+    int dx = (x1-x0);
+    int dy = (y1-y0);
+    int sdx = (dx>0)?1:-1;
+    int sdy = (dy>0)?1:-1;
+    int yerrdiv = ( dx * sdx );  //dy, but always positive.
+    int xerrdiv = ( dy * sdy );  //dx, but always positive.
+    int yerrnumerator = 0;
+    int xerrnumerator = 0;
+	int cx = x0;
+	int cy = y0;
 
-	bx0 = x0;
-	by0 = y0;
-	bx1 = x1;
-	by1 = y1;
+    if( cx < 0 && x1 < 0 ) return;
+    if( cy < 0 && y1 < 0 ) return;
+    if( cx >= BRESEN_W && x1 >= BRESEN_W ) return;
+    if( cy >= BRESEN_H && y1 >= BRESEN_H ) return;
 
-	if( x < 0 && x1 < 0 ) return;
-	if( y < 0 && y1 < 0 ) return;
-	if( x >= BRESEN_W && x1 >= BRESEN_W ) return;
-	if( y >= BRESEN_H && y1 >= BRESEN_H ) return;
+    //We put the checks above to check this, in case we have a situation where
+    // we have a 0-length line outside of the viewable area.  If that happened,
+    // we would have aborted before hitting this code.
 
-	//We put the checks above to check this, in case we have a situation where
-	// we have a 0-length line outside of the viewable area.  If that happened,
-	// we would have aborted before hitting this code.
+    if( yerrdiv > 0 )
+    {
+        int dxA = 0;
+        if( cx < 0 )
+        {
+            dxA = 0 - cx;
+            cx = 0;
+        }
+        if( cx > BRESEN_W-1 )
+        {
+            dxA = (cx - (BRESEN_W-1));
+            cx = BRESEN_W-1;
+        }
+        if( dxA || xerrdiv <= yerrdiv )
+        {
+            yerrnumerator = (((dy * sdy)<<16) + yerrdiv/2) / yerrdiv;
+            if( dxA )
+            {
+                cy += (((yerrnumerator * dxA)) * sdy) >> FIXEDPOINT; //This "feels" right
+                //Weird situation - if we cal, and now, both ends are out on the same side abort.
+                if( cy < 0 && y1 < 0 ) return;
+                if( cy > BRESEN_H-1 && y1 > BRESEN_H-1 ) return;
+            }
+        }
+    }
 
-	if( yerrdiv > 0 )
-	{
-		int dxA = 0;
-		if( x < 0 )
-		{
-			dxA = 0 - x;
-			x = 0;
-		}
-		if( x > BRESEN_W-1 )
-		{
-			dxA = (x - (BRESEN_W-1));
-			x = BRESEN_W-1;
-		}
-		if( dxA || xerrdiv <= yerrdiv )
-		{
-			yerrnumerator = (((dy * sdy)<<16) + yerrdiv/2) / yerrdiv;
-			if( dxA )
-			{
-				y += (((yerrnumerator * dxA) ) * sdy) >> FIXEDPOINT; //This "feels" right
-				//Weird situation - if we cal, and now, both ends are out on the same side abort.
-				if( y < 0 && y1 < 0 ) return;
-				if( y > BRESEN_H-1 && y1 > BRESEN_H-1 ) return;
-			}
-		}
-	}
+    if( xerrdiv > 0 )
+    {
+        int dyA = 0;    
+        if( cy < 0 )
+        {
+            dyA = 0 - cy;
+            cy = 0;
+        }
+        if( cy > BRESEN_H-1 )
+        {
+            dyA = (cy - (BRESEN_H-1));
+            cy = BRESEN_H-1;
+        }
+        if( dyA || xerrdiv > yerrdiv )
+        {
+            xerrnumerator = (((dx * sdx)<<16) + xerrdiv/2 ) / xerrdiv;
+            if( dyA )
+            {
+                cx += (((xerrnumerator*dyA)) * sdx) >> FIXEDPOINT; //This "feels" right.
+                //If we've come to discover the line is actually out of bounds, abort.
+                if( cx < 0 && x1 < 0 ) return;
+                if( cx > BRESEN_W-1 && x1 > BRESEN_W-1 ) return;
+            }
+        }
+    }
 
-	if( xerrdiv > 0 )
-	{
-		int dyA = 0;	
-		if( y < 0 )
-		{
-			dyA = 0 - y;
-			y = 0;
-		}
-		if( y > BRESEN_H-1 )
-		{
-			dyA = (y - (BRESEN_H-1));
-			y = BRESEN_H-1;
-		}
-		if( dyA || xerrdiv > yerrdiv )
-		{
-			xerrnumerator = (((dx * sdx)<<16) + xerrdiv/2 ) / xerrdiv;
-			if( dyA )
-			{
-				x += (((xerrnumerator*dyA) ) * sdx) >> FIXEDPOINT; //This "feels" right.
-				//If we've come to discover the line is actually out of bounds, abort.
-				if( x < 0 && x1 < 0 ) return;
-				if( x > BRESEN_W-1 && x1 > BRESEN_W-1 ) return;
-			}
-		}
-	}
+    if( x1 == cx && y1 == cy )
+    {
+        drawPixelUnsafe( cx, cy );
+        return;
+    }
 
-	if( x1 == x && y1 == y )
-	{
-		drawPixelUnsafe( x, y );
-		return;
-	}
+    //Make sure we haven't clamped the wrong way.
+    //Also this checks for vertical/horizontal violations.
+    if( dx > 0 )
+    {
+        if( cx > BRESEN_W-1 ) return;
+        if( cx > x1 ) return;
+    }
+    else if( dx < 0 )
+    {
+        if( cx < 0 ) return;
+        if( cx < x1 ) return;
+    }
 
-	//Make sure we haven't clamped the wrong way.
-	//Also this checks for vertical/horizontal violations.
-	if( dx > 0 )
-	{
-		if( x > BRESEN_W-1 ) return;
-		if( x > x1 ) return;
-	}
-	else if( dx < 0 )
-	{
-		if( x < 0 ) return;
-		if( x < x1 ) return;
-	}
+    if( dy > 0 )
+    {
+        if( cy > BRESEN_H-1 ) return;
+        if( cy > y1 ) return;
+    }
+    else if( dy < 0 )
+    {
+        if( cy < 0 ) return;
+        if( cy < y1 ) return;
+    }
 
-	if( dy > 0 )
-	{
-		if( y > BRESEN_H-1 ) return;
-		if( y > y1 ) return;
-	}
-	else if( dy < 0 )
-	{
-		if( y < 0 ) return;
-		if( y < y1 ) return;
-	}
+    //Force clip end coordinate.
+    //NOTE: We have an extra check within the inner loop, to avoid complicated math here.
+    //Theoretically, we could math this so that in the end-coordinate clip stage
+    //to make sure this condition just could never be hit, however, that is very
+    //difficult to guarantee under all situations and may have weird edge cases.
+    //So, I've decided to stick this here.
 
-	//Force clip end coordinate.
-	//NOTE: We have an extra check within the inner loop, to avoid complicated math here.
-	//Theoretically, we could math this so that in the end-coordinate clip stage
-	//to make sure this condition just could never be hit, however, that is very
-	//difficult to guarantee under all situations and may have weird edge cases.
-	//So, I've decided to stick this here.
+    if( xerrdiv > yerrdiv )
+    {
+        int xerr = 1<<FIXEDPOINTD2;
+        if( x1 < 0 ) x1 = 0;
+        if( x1 > BRESEN_W-1) x1 = BRESEN_W-1;
+        x1 += sdx; //Tricky - make sure the "next" mark we hit doesn't overflow.
 
-	printf( "%d %d -> %d %d\n", x, y, x1, y1 );
-	if( xerrdiv > yerrdiv )
-	{
-		int xerr = 1<<FIXEDPOINTD2;
-		if( x1 < 0 ) x1 = 0;
-		if( x1 > BRESEN_W-1) x1 = BRESEN_W-1;
-		x1 += sdx; //Tricky - make sure the "next" mark we hit doesn't overflow.
+        if( y1 < 0 ) y1 = 0;
+        if( y1 > BRESEN_H-1 ) y1 = BRESEN_H-1;
 
-		if( y1 < 0 ) y1 = 0;
-		if( y1 > BRESEN_H-1 ) y1 = BRESEN_H-1;
+        for( ; cy != y1; cy+=sdy )
+        {
+            drawPixelUnsafe( cx, cy );
+            xerr += xerrnumerator;
+            while( xerr >= (1<<FIXEDPOINT) )
+            {
+                cx += sdx;
+                if( cx == x1 ) return;
+                drawPixelUnsafe( cx, cy );
+                xerr -= 1<<FIXEDPOINT;
+            }
+        }
+        drawPixelUnsafe( cx, cy );
+    }
+    else
+    {
+        int yerr = 1<<FIXEDPOINTD2;
 
-		for( ; y != y1; y+=sdy )
-		{
-			drawPixelUnsafe( x, y );
-			xerr += xerrnumerator;
-			while( xerr >= (1<<FIXEDPOINT) )
-			{
-				x += sdx;
-				if( x == x1 ) return;
-				drawPixelUnsafe( x, y );
-				xerr -= 1<<FIXEDPOINT;
-			}
-		}
-		drawPixelUnsafe( x, y );
-	}
-	else
-	{
-		int yerr = 1<<FIXEDPOINTD2;
+        if( y1 < 0 ) y1 = 0;
+        if( y1 > BRESEN_H-1 ) y1 = BRESEN_H-1;
+        y1 += sdy;        //Tricky: Make sure the NEXT mark we hit doens't overflow.
 
-		if( y1 < 0 ) y1 = 0;
-		if( y1 > BRESEN_H-1 ) y1 = BRESEN_H-1;
-		y1 += sdy;		//Tricky: Make sure the NEXT mark we hit doens't overflow.
+        if( x1 < 0 ) x1 = 0;
+        if( x1 > BRESEN_W-1) x1 = BRESEN_W-1;
 
-		if( x1 < 0 ) x1 = 0;
-		if( x1 > BRESEN_W-1) x1 = BRESEN_W-1;
-
-		for( ; x != x1; x+=sdx )
-		{
-			drawPixelUnsafe( x, y );
-			yerr += yerrnumerator;
-			while( yerr >= 1<<FIXEDPOINT )
-			{
-				y += sdy;
-				if( y == y1 ) return;
-				drawPixelUnsafe( x, y );
-				yerr -= 1<<FIXEDPOINT;
-			}
-		}
-		drawPixelUnsafe( x, y );
-	}
+        for( ; cx != x1; cx+=sdx )
+        {
+            drawPixelUnsafe( cx, cy );
+            yerr += yerrnumerator;
+            while( yerr >= 1<<FIXEDPOINT )
+            {
+                cy += sdy;
+                if( cy == y1 ) return;
+                drawPixelUnsafe( cx, cy );
+                yerr -= 1<<FIXEDPOINT;
+            }
+        }
+        drawPixelUnsafe( cx, cy );
+    }
 }
 
 int main()
