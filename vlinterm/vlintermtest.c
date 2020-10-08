@@ -56,7 +56,6 @@ int LoadFont(const char * fontfile)
 struct TermStructure ts;
 
 
-
 void * rxthread( void * v )
 {
 	struct TermStructure * ts = v;
