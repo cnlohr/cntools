@@ -434,19 +434,21 @@ void EmitChar( struct TermStructure * ts, int crx )
 					{
 						int k = ts->csistate[i];
 						if( is_seq_default ) k = 0; 
+
 						if( k == 0 ) { ts->current_color = 7; ts->current_attributes = 0; }
 						else if( k == 1 ) { ts->current_attributes |= 1<<0; }
 						else if( k == 2 ) { ts->current_attributes |= 1<<1; }
 						else if( k == 4 ) { ts->current_attributes |= 1<<2; }
 						else if( k == 5 ) { ts->current_attributes |= 1<<3; }
 						else if( k == 7 ) { ts->current_attributes |= 1<<4; }
+						else if( k >= 8 && k <= 15 ) { ts->current_color = (ts->current_color & 0xf0) | (k-8); }
 						else if( k == 21 ) { ts->current_attributes &= ~(1<<0); }
 						else if( k == 22 ) { ts->current_attributes &= ~(1<<1); }
 						else if( k == 24 ) { ts->current_attributes &= ~(1<<2); }
 						else if( k == 25 ) { ts->current_attributes &= ~(1<<3); }
 						else if( k == 27 ) { ts->current_attributes &= ~(1<<4); }
-						else if( k >= 30 && k < 37 ) { ts->current_color = (ts->current_color&0xf0) | ( k - 30 ); }
-						else if( k >= 40 && k < 47 ) { ts->current_color = (ts->current_color&0x0f) | ( ( k - 40 ) << 4 ); }
+						else if( k >= 30 && k <= 37 ) { ts->current_attributes |= 1 << 5; ts->current_color = (ts->current_color&0xf0) | ( k - 30 ); }
+						else if( k >= 40 && k <= 47 ) { ts->current_attributes |= 1 << 6; ts->current_color = (ts->current_color&0x0f) | ( ( k - 40 ) << 4 ); }
 						else if( k == 38 ) { ts->current_attributes |= 1<<4; ts->current_color = (ts->current_color&0xf0) | 7; }
 						else if( k == 39 ) { ts->current_attributes &= ~(1<<4); ts->current_color = (ts->current_color&0xf0) | 7; }
 						else if( k == 49 ) { ts->current_color = (ts->current_color&0x0f) | (0<<4); }
