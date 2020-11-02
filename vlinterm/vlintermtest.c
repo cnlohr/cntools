@@ -313,7 +313,7 @@ int main( int argc, char ** argv )
 	}
 	else
 	{
-		font_w = 6;
+		font_w = 7;
 		font_h = 12;
 	}
 
@@ -387,7 +387,9 @@ int main( int argc, char ** argv )
 
 			if( rawdrawtext )
 			{
+				CNFGBGColor = 0x000000;
 				CNFGClearFrame();
+				CNFGSetLineWidth( (CHAR_DOUBLE+1) );
 				for( y = 0; y < ts.chary; y++ )
 				for( x = 0; x < ts.charx; x++ )
 				{
@@ -406,8 +408,14 @@ int main( int argc, char ** argv )
 					uint32_t colorb = TermColor( 0x00000000, color, attrib );
 					uint32_t colorf = TermColor( 0xffffffff, color, attrib );
 
-					CNFGColor( colorb );
-					CNFGTackRectangle( CNFGPenX, CNFGPenY, CNFGPenX + (CHAR_DOUBLE+1)*font_w, CNFGPenY + (CHAR_DOUBLE+1)*font_h );
+					if( colorb != CNFGBGColor )
+					{
+						CNFGColor( colorb );
+						CNFGTackRectangle( CNFGPenX, CNFGPenY, CNFGPenX + (CHAR_DOUBLE+1)*font_w, CNFGPenY + (CHAR_DOUBLE+1)*font_h );
+					}
+
+					CNFGColor( colorf );
+
 					if( is_cursor )
 					{
 						int x;
@@ -420,15 +428,17 @@ int main( int argc, char ** argv )
 							CNFGTackSegment( CNFGPenX + x, CNFGPenY + 0, CNFGPenX + font_w*(CHAR_DOUBLE+1), CNFGPenY + y );
 							CNFGTackSegment( CNFGPenX + font_w*(CHAR_DOUBLE+1), CNFGPenY + y, CNFGPenX + ix, CNFGPenY + font_h*(CHAR_DOUBLE+1) );
 							CNFGTackSegment( CNFGPenX + ix, CNFGPenY + font_h*(CHAR_DOUBLE+1), CNFGPenX + 0, CNFGPenY + iy );
-							//printf( "%d %d  %d %d\n", x, y, ix, iy );
 						}
 					}
 
 
+					CNFGPenX+=(CHAR_DOUBLE+1)*2;
+					CNFGPenY+=(CHAR_DOUBLE+1)*2;
+
 					char ct[2];
 					ct[0] = c;
 					ct[1] = 0;
-					CNFGColor( colorf );
+					int dx, dy;
 					CNFGDrawText( ct, (CHAR_DOUBLE+1)*2 );
 				}
 				CNFGSwapBuffers();
