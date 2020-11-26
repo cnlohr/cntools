@@ -16,6 +16,15 @@
 
 #define MAX_RESPONSE_LENGTH 25000000
 
+
+int ishexchar( char c )
+{
+	if( c >= '0' && c <= '9' ) return 1;
+	if( c >= 'a' && c <= 'f' ) return 1;
+	if( c >= 'A' && c <= 'F' ) return 1;
+	return 0;
+}
+
 struct cnhttpclientresponse * CNHTTPClientTransact( struct cnhttpclientrequest * r )
 {
 	int i;
@@ -237,8 +246,9 @@ struct cnhttpclientresponse * CNHTTPClientTransact( struct cnhttpclientrequest *
 			int chunklen = 0;
 			for( i = 0; i < 10; i++ )
 			{
-				int c = hex1byte( *(splpl++) );
-				if( c < 16 )
+				char chardat = *(splpl++);
+				int c = hex1byte( chardat );
+				if( ishexchar( chardat ) )
 					chunklen = (chunklen<<4) | c;
 				else
 					break;
