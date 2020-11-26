@@ -3,9 +3,17 @@
 #include "vlinterm.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
+
+#if !defined(WINDOWS) && !defined(WIN32) && !defined(WIN64)
 #include <termios.h>
+#include <sys/types.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
+#include <unistd.h>
+
+#define POSIX_STUFF
+#endif
 
 //#define DEBUG_VLINTERM
 
@@ -126,10 +134,14 @@ void ResetTerminal( struct TermStructure * ts )
 }
 
 
+#ifdef POSIX_STUFF
+
 int FeedbackTerminal( struct TermStructure * ts, const uint8_t * data, int len )
 {
 	return write( ts->ptspipe, data, len );
 }
+
+#endif
 
 static void InsertBlankLines( struct TermStructure * ts, int l )
 {
@@ -144,13 +156,13 @@ static void InsertBlankLines( struct TermStructure * ts, int l )
 	}
 }
 
-static int ScrollDown( struct TermStructure * ts, int lines )
+static void ScrollDown( struct TermStructure * ts, int lines )
 {
 	BufferCopy( ts, (ts->top+lines)*ts->charx, ts->top*ts->charx, (ts->bottom-ts->top-lines)*ts->charx );
 	BufferSet( ts, (ts->top)*ts->charx, 0, ts->charx*lines );
 }
 
-static int ScrollUp( struct TermStructure * ts, int lines )
+static void ScrollUp( struct TermStructure * ts, int lines )
 {
 	if( ts->scroll_top > 0 || ( ts->scroll_bottom < ts->chary - 1 && ts->scroll_bottom >= 0 ) )
 	{
@@ -434,19 +446,21 @@ void EmitChar( struct TermStructure * ts, int crx )
 					{
 						int k = ts->csistate[i];
 						if( is_seq_default ) k = 0; 
+
 						if( k == 0 ) { ts->current_color = 7; ts->current_attributes = 0; }
 						else if( k == 1 ) { ts->current_attributes |= 1<<0; }
 						else if( k == 2 ) { ts->current_attributes |= 1<<1; }
 						else if( k == 4 ) { ts->current_attributes |= 1<<2; }
 						else if( k == 5 ) { ts->current_attributes |= 1<<3; }
 						else if( k == 7 ) { ts->current_attributes |= 1<<4; }
+						else if( k >= 8 && k <= 15 ) { ts->current_color = (ts->current_color & 0xf0) | (k-8); }
 						else if( k == 21 ) { ts->current_attributes &= ~(1<<0); }
 						else if( k == 22 ) { ts->current_attributes &= ~(1<<1); }
 						else if( k == 24 ) { ts->current_attributes &= ~(1<<2); }
 						else if( k == 25 ) { ts->current_attributes &= ~(1<<3); }
 						else if( k == 27 ) { ts->current_attributes &= ~(1<<4); }
-						else if( k >= 30 && k < 37 ) { ts->current_color = (ts->current_color&0xf0) | ( k - 30 ); }
-						else if( k >= 40 && k < 47 ) { ts->current_color = (ts->current_color&0x0f) | ( ( k - 40 ) << 4 ); }
+						else if( k >= 30 && k <= 37 ) { ts->current_attributes |= 1 << 5; ts->current_color = (ts->current_color&0xf0) | ( k - 30 ); }
+						else if( k >= 40 && k <= 47 ) { ts->current_attributes |= 1 << 6; ts->current_color = (ts->current_color&0x0f) | ( ( k - 40 ) << 4 ); }
 						else if( k == 38 ) { ts->current_attributes |= 1<<4; ts->current_color = (ts->current_color&0xf0) | 7; }
 						else if( k == 39 ) { ts->current_attributes &= ~(1<<4); ts->current_color = (ts->current_color&0xf0) | 7; }
 						else if( k == 49 ) { ts->current_color = (ts->current_color&0x0f) | (0<<4); }
@@ -589,6 +603,9 @@ void ResizeScreen( struct TermStructure * ts, int neww, int newh )
 	OGUnlockMutex( ts->screen_mutex );
 }
 
+
+#ifdef POSIX_STUFF
+
 int spawn_process_with_pts( const char * execparam, char * const argv[], int * pid )
 {
 	int r = getpt();
@@ -616,7 +633,8 @@ int spawn_process_with_pts( const char * execparam, char * const argv[], int * p
 		dup2( r, 2 );
 		setsid();
 		setenv("TERM", "xterm", 1);
-		execvp( execparam, argv );
+		int r = execvp( execparam, argv );
+		return r; //Should not get called, ever.
 	}
 	else
 	{
@@ -632,6 +650,7 @@ int spawn_process_with_pts( const char * execparam, char * const argv[], int * p
 	}
 }
 
+#endif
 
 void DestroyTerminal( struct TermStructure * ts )
 {
