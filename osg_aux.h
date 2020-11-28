@@ -5,8 +5,20 @@
 //THIS IS A DRAFT
 
 #ifndef OSG_INLINE
-#define OSG_INLINE static inline
+	#ifdef OSG_STATIC
+		#define OSG_INLINE static
+		#define OSG_IMPLEMENTATION
+	#else
+		#define OSG_INLINE
+	#endif
 #endif
+
+#ifndef OSG_IMPLEMENTATION
+
+OSG_INLINE char * OSGReadFileString( FILE * f, int * length );
+OSG_INLINE char * OSGLineFromFile( FILE * f );
+
+#else
 
 
 #define OSGRF_BUFFERSIZE 1024
@@ -81,7 +93,8 @@ OSG_INLINE char * OSGLineFromFile( FILE * f )
 	return ret;
 }
 
+#endif //OSG_IMPLEMENTATION
 
-#endif
+#endif //_PROPOSED_OSG_H
 
 
