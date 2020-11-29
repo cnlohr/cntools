@@ -68,7 +68,15 @@
      //Typesafe delete.
      RBDESTROY( tree );
 
-  You can also just do strint, and it will use strings as the index, and integers as the payload.
+  You can also just do strint, and it will use strings as the index, and
+     integers as the payload.
+
+  You can also treat this not like a c++ map, but a c++ multimap.  Normally
+      the comparison function returns 0 if there is a match, if instead you
+      always return -1 or +1, then, it will continue to insert items into
+      the map with the identical key, for instance you can use this to
+      create a priority queue, or to make a sorting system. You can do this
+      with ints or ptrs with RBptrcmpnomatch.
 
   Also provided: cnptrset - for a set-type data structure.  It is actually
      a cnrbtree_rbset_trbset_null_t and can be used as such.  This looks odd
@@ -78,10 +86,18 @@
      cnptrset * set = cnptrset_create();
      static int var;
      cnptrset_insert( set, &var );
-     void * i; //Quirk in cnptrset_foreach.  (TODO: can we remove that quirk?)
+     void * i; //Quirk in cnptrset_foreach. (NOTE you may want to use RBFOREACH)
      cnptrset_foreach( set, i ) { printf( "%p\n", i ); }
      cnptrset_remove( set, &var );
      cnptrset_destroy( set );
+
+  Note that if your payload is a POD, like an int, it will start uninitialized,
+     so you will have to check if it has been initialized yet with RBHAS.
+
+     if( RBHAS( mytree, mykey ) )
+        RBA( mytree, mykey )++;
+     else
+        RBA( mytree, mykey ) = 1;
 
   Authors:
     2019 <>< Charles Lohr
@@ -712,6 +728,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic_no
 #define RBCBSTR RBstrcmp, RBstrcpy, RBstrdel
 
 
+#define RBptrcmpnomatch(x,y) (((((intptr_t)x-(intptr_t)y)<0)?-1:1))
 #define RBptrcmp(x,y) ((x==y)?0:((((intptr_t)x-(intptr_t)y)<0)?-1:1))
 #define RBptrcpy(x,y,z) { x = y; }
 #define RBnullop(x,y)
