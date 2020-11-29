@@ -21,7 +21,16 @@
 
   Alternatively, if you are using a compile that supports the __weak__
   attribute you may just set CNRBTREE_GENERIC_DECORATOR and
-  CNRBTREE_TEMPLATE_DECORATOR to __attribute__((weak))
+  CNRBTREE_TEMPLATE_DECORATOR to __attribute__((weak)).  The default behavior
+  is for CNRBTREE_TEMPLATE_DECORATOR to be static inline.  You can override
+  it to be default visibility with
+    #define CNRBTREE_GENERIC_DECORATOR __attribute__((weak))
+
+  CNRBTREE_GENERIC_DECORATOR defults to __attribute__((noinline)) and is used
+  on common functions which it seems many compilers are mislead into thinking
+  they should inline.  You can override this behavior by
+    #define CNRBTREE_GENERIC_DECORATOR
+  
 
   This is templated red-black tree for C.  It can be used for storing things
   like dictionaries, iterating through automatically sorting lists, finding
@@ -160,11 +169,11 @@
 #endif
 
 #ifndef CNRBTREE_GENERIC_DECORATOR
-#define CNRBTREE_GENERIC_DECORATOR
+#define CNRBTREE_GENERIC_DECORATOR __attribute__((noinline))
 #endif
 
 #ifndef CNRBTREE_TEMPLATE_DECORATOR
-#define CNRBTREE_TEMPLATE_DECORATOR
+#define CNRBTREE_TEMPLATE_DECORATOR static inline
 #endif
 
 //Shorthand for red-black access, and typesafe deletion.
