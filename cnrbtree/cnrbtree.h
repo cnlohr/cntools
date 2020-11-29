@@ -2,12 +2,17 @@
        https://github.com/cnlohr/cntools/cnrbtree
        no warranty implied; use at your own risk
 
-   Do this:
+  This is effectively a data structure which provides C functionality similar
+    to the C++ STL's <map>, <multimap> and <set>.  It is templated and
+    supports anything that is comparable for the key, strings, ints, pointers,
+    etc.
+
+  Do this:
 
      #define CNRBTREE_IMPLEMENTATION
 
-   before you include this file in *one* C or C++ file to create the instance
-   I.e. it should look something like this:
+  Before you include this file in *one* C or C++ file to create the instance
+  I.e. it should look something like this:
 
      #include <...>
      #include <...>
