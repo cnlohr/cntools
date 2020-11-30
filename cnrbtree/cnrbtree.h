@@ -225,6 +225,17 @@ static inline const struct cnrbtree_generic_node_t *cnrbtree_generic_nil() {
     return &nil;
 }
 
+
+CNRBTREE_TEMPLATE_DECORATOR cnrbtree_generic* cnrbtree_generic_init(cnrbtree_generic * ret)
+{
+    cnrbtree_generic_node * nil = (cnrbtree_generic_node *)cnrbtree_generic_nil();
+    ret->node = nil;
+    ret->tail = nil;
+    ret->begin = nil;
+    ret->size = 0;
+    return ret;
+}
+
 CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase(cnrbtree_generic_node *n, cnrbtree_generic *t);
 
 CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node *
@@ -240,6 +251,7 @@ cnrbtree_generic_prev(cnrbtree_generic *tree, cnrbtree_generic_node *node);
 typedef int (*cnrbtree_generic_compare)(const void *key, const cnrbtree_generic_node *node);
 
 typedef void (*cnrbtree_generic_copykey)(const void *key, cnrbtree_generic_node *node);
+typedef void (*cnrbtree_generic_deletekey)(cnrbtree_generic_node *node);
 
 CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node *
 cnrbtree_generic_get2(struct cnrbtree_generic_t *tree, cnrbtree_generic_compare fn, const void *key, int *cmp);
@@ -307,6 +319,28 @@ cnrbtree_generic_access(struct cnrbtree_generic_t *tree, cnrbtree_generic_copyke
     copy_fn(key, ret);
     return ret;
 }
+
+CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_remove( cnrbtree_generic * tree, cnrbtree_generic_deletekey delete_fn,
+                                                         cnrbtree_generic_compare cmp_fn, const void *key) {
+    const cnrbtree_generic_node *nil = cnrbtree_generic_nil();
+    cnrbtree_generic_node *tmp = cnrbtree_generic_get(tree, cmp_fn, key);
+    if (tmp == 0) return;
+
+    /* found an item, tmp, to delete. */
+    cnrbtree_generic_removebase((cnrbtree_generic_node *) tmp, (cnrbtree_generic *) tree);
+    delete_fn(tmp);
+    CNRBTREE_FREE(tmp);
+}
+
+static __attribute__((noinline)) void cnrbtree_generic_destroy_node_internal( cnrbtree_generic * tree, cnrbtree_generic_node * node, cnrbtree_generic_deletekey delete_fn )
+  {
+    if( node == cnrbtree_generic_nil() ) return;
+    cnrbtree_generic_destroy_node_internal(tree, node->left, delete_fn);
+    cnrbtree_generic_destroy_node_internal(tree, node->right, delete_fn);
+    delete_fn(node);
+    CNRBTREE_FREE( node );
+  }
+
 
 CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node *
 cnrbtree_generic_get(struct cnrbtree_generic_t *tree, cnrbtree_generic_compare fn, const void *key) {
@@ -472,7 +506,7 @@ cnrbtree_generic_insert_repair_tree_with_fixup_primary(cnrbtree_generic_node *tm
     if (cmp < 0) tmp->left = ret;
     else tmp->right = ret;
 
-    /* Here, [ret] is the new node, it's red, and [tmp] is our parent */ \
+    /* Here, [ret] is the new node, it's red, and [tmp] is our parent */
     if (tmp->color == CNRBTREE_COLOR_RED) {
         cnrbtree_generic_insert_repair_tree_with_fixup((cnrbtree_generic_node *) ret, (cnrbtree_generic *) tree);
     } /* Else InsertCase2 */
@@ -657,6 +691,10 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase(cnrbtree_generic_nod
     const key_t* key = (key_t*)_key;                    \
     cnrbtree_##key_t##data_t##_node * node = (cnrbtree_##key_t##data_t##_node *)_node; \
     copykeyxy(node->key, *key, node->data);                \
+  }                                                                        \
+    CNRBTREE_TEMPLATE_DECORATOR void cnrbtree_##key_t##data_t##_deletekey(cnrbtree_generic_node* _node) {    \
+    cnrbtree_##key_t##data_t##_node * node = (cnrbtree_##key_t##data_t##_node *)_node; \
+    deletekeyxy(node->key, node->data);                \
   }                                    \
   CNRBTREE_TEMPLATE_DECORATOR cnrbtree_##key_t##data_t##_node * cnrbtree_##key_t##data_t##_get2( cnrbtree_##key_t##data_t * tree, key_t key, int* cmp) \
   {                                    \
@@ -679,36 +717,12 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase(cnrbtree_generic_nod
     CNRBTREE_FREE(tmp);                            \
   }                                    \
   CNRBTREE_TEMPLATE_DECORATOR void cnrbtree_##key_t##data_t##_remove( cnrbtree_##key_t##data_t * tree, key_t key ) \
-  {                                    \
-    const cnrbtree_##key_t##data_t##_node * nil = cnrbtree_##key_t##data_t##_nil(); \
-    cnrbtree_##key_t##data_t##_node * tmp = 0;                \
-    cnrbtree_##key_t##data_t##_node * tmpnext = 0;            \
-    cnrbtree_##key_t##data_t##_node * child;                \
-    if( tree->node == nil ) return;                    \
-    tmp = tree->node;                            \
-    int cmp;                                \
-    while( 1 )                                \
-      {                                    \
-    cmp = comparexy( key, tmp->key );                \
-    if( cmp < 0 ) tmpnext = tmp->left;                \
-    else if( cmp > 0 ) tmpnext = tmp->right;            \
-    else break;                            \
-    if( tmpnext == nil ) return;                    \
-    tmp = tmpnext;                            \
-      }                                    \
-    /* found an item, tmp, to delete. */                \
-    cnrbtree_generic_removebase( (cnrbtree_generic_node*) tmp, (cnrbtree_generic*)tree ); \
-    deletekeyxy( tmp->key, tmp->data );                    \
-    CNRBTREE_FREE(tmp);                            \
+  {                                                                        \
+    return cnrbtree_generic_remove((struct cnrbtree_generic_t *)tree, cnrbtree_##key_t##data_t##_deletekey, cnrbtree_##key_t##data_t##_compare, &key);                                                                       \
   }                                    \
   static __attribute__((noinline)) void cnrbtree_##key_t##data_t##_destroy_node_internal( cnrbtree_##key_t##data_t * tree, cnrbtree_##key_t##data_t##_node * node ) \
   {                                    \
-    const cnrbtree_##key_t##data_t##_node * nil = cnrbtree_##key_t##data_t##_nil(); \
-    if( node == nil ) return;                        \
-    deletekeyxy( node->key, node->data );                \
-    cnrbtree_##key_t##data_t##_destroy_node_internal( tree, node->left ); \
-    cnrbtree_##key_t##data_t##_destroy_node_internal( tree, node->right ); \
-    CNRBTREE_FREE( node );                        \
+    cnrbtree_generic_destroy_node_internal((struct cnrbtree_generic_t *)tree, (cnrbtree_generic_node*)node, cnrbtree_##key_t##data_t##_deletekey);                                                                       \
   }                                    \
   CNRBTREE_TEMPLATE_DECORATOR void cnrbtree_##key_t##data_t##_destroy( cnrbtree_##key_t##data_t * tree ) \
   {                                    \
@@ -718,12 +732,8 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase(cnrbtree_generic_nod
                                     \
   CNRBTREE_TEMPLATE_DECORATOR cnrbtree_##key_t##data_t * cnrbtree_##key_t##data_t##_create() \
   {                                    \
-    cnrbtree_##key_t##data_t##_node * nil = (cnrbtree_##key_t##data_t##_node *)cnrbtree_##key_t##data_t##_nil(); \
-    cnrbtree_##key_t##data_t * ret = CNRBTREE_MALLOC( sizeof( cnrbtree_##key_t##data_t ) ); \
-    ret->node = nil;                            \
-    ret->tail = nil;                            \
-    ret->begin = nil;                            \
-    ret->size = 0;                            \
+    cnrbtree_##key_t##data_t * ret = CNRBTREE_MALLOC( sizeof( cnrbtree_##key_t##data_t ) );                                  \
+    cnrbtree_generic_init((cnrbtree_generic *)ret);                                                                       \
     ret->access = cnrbtree_##key_t##data_t##_access;            \
     ret->get = cnrbtree_##key_t##data_t##_get;                \
     ret->destroy = cnrbtree_##key_t##data_t##_destroy;            \
