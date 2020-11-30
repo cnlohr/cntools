@@ -83,9 +83,9 @@ int main()
 	cnrbtree_strstr * tree = cnrbtree_strstr_create();
 
 	srand(0);
-	#define ITERATIONS 1000
+	#define ITERATIONS 10000
 	int i, j;
-	for( j = 0; j < 3000; j++ )
+	for( j = 0; j < 1000; j++ )
 	{
 		char stta[ITERATIONS][9];
 		for( i = 0; i < ITERATIONS; i++ )
@@ -119,9 +119,9 @@ int main()
 				exit( 5 );
 			}
 			free( n->data );
-			cnrbtree_strstr_remove( tree, stta[i] );
+			cnrbtree_strstr_erase( tree, n );
 		}
-		if( tree->node != &tree->nil )
+		if( tree->node != cnrbtree_generic_nil() )
 		{
 			printf( "Excess fault %p\n", tree->node );
 			exit( 6 );

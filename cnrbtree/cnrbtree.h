@@ -181,7 +181,7 @@
 #define RBA(x,y) (x->access)( x, y )->data
 #define RBHAS(x,y) ((x->get)( x, y ))
 #define RBDESTROY(x) (x->destroy)( x )
-#define RBFOREACH( type, tree, i ) for( cnrbtree_##type##_node * i = tree->begin; i != &tree->nil; i = (cnrbtree_##type##_node *)cnrbtree_generic_next( (cnrbtree_generic*)tree, (cnrbtree_generic_node *)i ) )
+#define RBFOREACH( type, tree, i ) for( cnrbtree_##type##_node * i = tree->begin; i != cnrbtree_generic_nil(); i = (cnrbtree_##type##_node *)cnrbtree_generic_next( (cnrbtree_generic*)tree, (cnrbtree_generic_node *)i ) )
 #endif
 
 struct cnrbtree_generic_node_t;
@@ -203,9 +203,16 @@ typedef struct cnrbtree_generic_t
 	void (*destroy)( struct cnrbtree_generic_t * tree );
 	cnrbtree_generic_node * begin;
 	cnrbtree_generic_node * tail;
-	struct cnrbtree_generic_node_t nil;
 } cnrbtree_generic;
 
+static inline const struct cnrbtree_generic_node_t* cnrbtree_generic_nil() {
+    static struct cnrbtree_generic_node_t nil = {
+        .left = &nil,
+        .right = &nil,
+        .parent = &nil
+    };
+    return &nil;
+}
 //TODO: Consider collapsing this down to one bit.  Black == 0.
 #define CNRBTREE_COLOR_NONE  0
 #define CNRBTREE_COLOR_RED   1
@@ -216,6 +223,11 @@ CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_insert_repai
 CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_next( cnrbtree_generic *tree ,cnrbtree_generic_node * node );
 CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_prev( cnrbtree_generic *tree ,cnrbtree_generic_node * node );
 
+typedef int (*cnrbtree_generic_compare)(const void* key, const cnrbtree_generic_node * node);
+typedef void (*cnrbtree_generic_copykey)(const void* key, cnrbtree_generic_node * node);
+
+CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_get2( struct cnrbtree_generic_t * tree, cnrbtree_generic_compare fn, const void* key, int approx );
+CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_get( struct cnrbtree_generic_t * tree, cnrbtree_generic_compare fn, const void* key );
 #ifdef CNRBTREE_IMPLEMENTATION
 
 //The syntax used inside these functions is a little odd. It is
@@ -225,7 +237,7 @@ CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_prev( cnrbtr
 // stored to a temporary register.
 CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_next( cnrbtree_generic *tree, cnrbtree_generic_node * node )
 {
-	cnrbtree_generic_node * nil = &tree->nil;
+	const cnrbtree_generic_node * nil = cnrbtree_generic_nil();
 	cnrbtree_generic_node * tmp;
 	if( node == nil ) return 0;
 	tmp = node->right;
@@ -244,10 +256,59 @@ CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_next( cnrbtr
 	return tmp;
 }
 
+CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_get2( struct cnrbtree_generic_t * tree, cnrbtree_generic_compare fn, const void* key, int approx )
+	{
+		const cnrbtree_generic_node * nil = cnrbtree_generic_nil();
+		cnrbtree_generic_node * tmp = tree->node;
+		cnrbtree_generic_node * tmpnext = tmp;
+		while( tmp != nil )
+		{
+			int cmp = fn(key, tmp);
+			if( cmp < 0 ) tmpnext = tmp->left;
+			else if( cmp > 0 ) tmpnext = tmp->right;
+			else return tmp;
+			if( tmpnext == nil )
+			{
+				return approx?tmp:0;
+			}
+			tmp = tmpnext;
+		}
+		return 0;
+	}
+
+CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_access( struct cnrbtree_generic_t * tree, cnrbtree_generic_copykey copy_fn, cnrbtree_generic_compare cmp_fn, const void* key, int node_size )
+	{
+		const cnrbtree_generic_node * nil = cnrbtree_generic_nil();
+		/* This function could utilize cnrbtree_generic_get2 but would require an extra compare */
+		cnrbtree_generic_node * tmp = 0;
+		cnrbtree_generic_node * tmpnext = 0;
+		tmp = tree->node;
+		int cmp = 0;
+		while( tmp != nil )
+		{
+			cmp = cmp_fn(key, tmp);
+			if( cmp < 0 ) tmpnext = tmp->left;
+			else if( cmp > 0 ) tmpnext = tmp->right;
+			else return tmp;
+			if( tmpnext == nil ) break;
+			tmp = tmpnext;
+		}
+		cnrbtree_generic_node * ret;
+		ret = (cnrbtree_generic_node * ) cnrbtree_generic_insert_repair_tree_with_fixup_primary(
+			(cnrbtree_generic_node*)tmp, (cnrbtree_generic*)tree,
+			cmp, (int)node_size );
+		copy_fn(key, ret);
+		return ret;
+	}
+
+CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_get( struct cnrbtree_generic_t * tree, cnrbtree_generic_compare fn, const void* key )
+{
+    return cnrbtree_generic_get2( tree, fn, key, 0);
+}
 
 CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_prev( cnrbtree_generic * tree, cnrbtree_generic_node * node )
 {
-	cnrbtree_generic_node * nil = &tree->nil;
+	const cnrbtree_generic_node * nil = cnrbtree_generic_nil();
 	cnrbtree_generic_node * tmp;
 
 	if( node == nil ) return 0;
@@ -270,18 +331,12 @@ CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_prev( cnrbtr
 
 CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_update_begin_end( cnrbtree_generic * tree )
 {
-	cnrbtree_generic_node * nil = &tree->nil;
+	const cnrbtree_generic_node * nil = cnrbtree_generic_nil();
 	cnrbtree_generic_node * tmp = tree->node;
-	if( tmp != nil )
-	{
-		while( tmp->left != nil ) tmp = tmp->left;
-	}
+	while( tmp->left != nil ) tmp = tmp->left;
 	tree->begin = tmp;
 	tmp = tree->node;
-	if( tmp != nil )
-	{
-		while( tmp->right != nil ) tmp = tmp->right;
-	}
+	while( tmp->right != nil ) tmp = tmp->right;
 	tree->tail = tmp;
 }
 
@@ -289,7 +344,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_rotateleft( cnrbtree_generic * 
 {
 	/* From Wikipedia's RB Tree Page, seems slightly better than the CLRS model, but now that it's been
 		modified, there seems to be very little difference between them. */
-	cnrbtree_generic_node * nil = &tree->nil;
+	const cnrbtree_generic_node * nil = cnrbtree_generic_nil();
 	cnrbtree_generic_node * nnew = n->right;
 	cnrbtree_generic_node * p = n->parent;
 	cnrbtree_generic_node * nright = n->right = nnew->left;
@@ -313,7 +368,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_rotateleft( cnrbtree_generic * 
 CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_rotateright( cnrbtree_generic * tree, cnrbtree_generic_node * n )
 {
 	/* From Wikipedia's RB Tree Page */
-	cnrbtree_generic_node * nil = &tree->nil;
+	const cnrbtree_generic_node * nil = cnrbtree_generic_nil();
 	cnrbtree_generic_node * nnew = n->left;
 	cnrbtree_generic_node * p = n->parent;
 	cnrbtree_generic_node * nleft = n->left = nnew->right;
@@ -336,7 +391,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_rotateright( cnrbtree_generic *
 
 CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_insert_repair_tree_with_fixup( cnrbtree_generic_node * z, cnrbtree_generic * tree  )
 {
-	cnrbtree_generic_node * nil = &tree->nil;
+	const cnrbtree_generic_node * nil = cnrbtree_generic_nil();
 	cnrbtree_generic_node * zp;
 	cnrbtree_generic_node * zpp;
 	while( (( zp = z->parent ) != nil ) && zp->color == CNRBTREE_COLOR_RED )
@@ -392,19 +447,19 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_insert_repair_tree_with_fixup( 
 CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_insert_repair_tree_with_fixup_primary( cnrbtree_generic_node * tmp, cnrbtree_generic * tree, int cmp, int sizetoalloc )
 {
 	cnrbtree_generic_node * ret;
-	cnrbtree_generic_node * nil = &tree->nil;
+	const cnrbtree_generic_node * nil = cnrbtree_generic_nil();
 	ret = CNRBTREE_MALLOC( sizetoalloc );
 
 	ret->color = CNRBTREE_COLOR_RED;
-	ret->left = &tree->nil;
-	ret->right = &tree->nil;
-	ret->parent = &tree->nil;
+	ret->left = nil;
+	ret->right = nil;
+	ret->parent = nil;
 
 	/* Tricky shortcut for empty lists */
 	tree->size++;
 	if( tree->node == nil )
 	{
-		ret->parent = nil;
+        ret->parent = nil;
 		ret->color = CNRBTREE_COLOR_BLACK; /* InsertCase1 from wikipedia */
 		tree->node = ret;
 		cnrbtree_generic_update_begin_end( tree );
@@ -430,7 +485,7 @@ CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_insert_repai
 
 CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_transplant( cnrbtree_generic * T, cnrbtree_generic_node * u, cnrbtree_generic_node * v )
 {
-	cnrbtree_generic_node * nil = &T->nil;
+	const cnrbtree_generic_node * nil = cnrbtree_generic_nil();
 	cnrbtree_generic_node * up = u->parent;
 	if( up == nil )
 		T->node = v;
@@ -446,7 +501,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic_no
 {
 	T->size--;
 
-	cnrbtree_generic_node * nil = &T->nil;
+	const cnrbtree_generic_node * nil = cnrbtree_generic_nil();
 	cnrbtree_generic_node * x;
 	cnrbtree_generic_node * y = z;
 	char y_original_color = y->color;
@@ -606,32 +661,30 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic_no
 		void (*destroy)( struct cnrbtree_##key_t##data_t##_t * tree ); \
 		cnrbtree_##key_t##data_t##_node * begin; \
 		cnrbtree_##key_t##data_t##_node * tail; \
-		cnrbtree_##key_t##data_t##_node nil; \
-	} cnrbtree_##key_t##data_t; \
+	} cnrbtree_##key_t##data_t;                  \
+    static const cnrbtree_##key_t##data_t##_node* cnrbtree_##key_t##data_t##_nil() {                    \
+    return (cnrbtree_##key_t##data_t##_node*)cnrbtree_generic_nil();\
+    };                                          \
+    \
 	\
 
 #if CNRBTREE_TEMPLATECODE
 
 #define CNRBTREETEMPLATE( key_t, data_t, comparexy, copykeyxy, deletekeyxy ) \
-	CNRBTREETYPETEMPLATE( key_t, data_t ); \
+	CNRBTREETYPETEMPLATE( key_t, data_t );                                      \
+    CNRBTREE_TEMPLATE_DECORATOR int cnrbtree_##key_t##data_t##_compare(const void* _key, const cnrbtree_generic_node* _node) {                                  \
+    const key_t* key = (key_t*)_key;                                         \
+    const cnrbtree_##key_t##data_t##_node * node = (const cnrbtree_##key_t##data_t##_node *)_node;                                                              \
+    return comparexy(*key, node->key);\
+    }                                                                        \
+    CNRBTREE_TEMPLATE_DECORATOR void cnrbtree_##key_t##data_t##_copykey(const void* _key, cnrbtree_generic_node* _node) {                                  \
+    const key_t* key = (key_t*)_key;                                         \
+    cnrbtree_##key_t##data_t##_node * node = (cnrbtree_##key_t##data_t##_node *)_node;                                                              \
+    copykeyxy(node->key, *key, node->data);\
+    }                                                                         \
 	CNRBTREE_TEMPLATE_DECORATOR cnrbtree_##key_t##data_t##_node * cnrbtree_##key_t##data_t##_get2( cnrbtree_##key_t##data_t * tree, key_t key, int approx ) \
 	{\
-		cnrbtree_##key_t##data_t##_node * nil = &tree->nil; \
-		cnrbtree_##key_t##data_t##_node * tmp = tree->node; \
-		cnrbtree_##key_t##data_t##_node * tmpnext = tmp; \
-		while( tmp != nil ) \
-		{ \
-			int cmp = comparexy( key, tmp->key ); \
-			if( cmp < 0 ) tmpnext = tmp->left; \
-			else if( cmp > 0 ) tmpnext = tmp->right; \
-			else return tmp; \
-			if( tmpnext == nil ) \
-			{ \
-				return approx?tmp:0; \
-			} \
-			tmp = tmpnext; \
-		} \
-		return 0; \
+         return (cnrbtree_##key_t##data_t##_node *)cnrbtree_generic_get2((struct cnrbtree_generic_t *)tree, &cnrbtree_##key_t##data_t##_compare, &key, approx);                                                                    \
 	}\
 	\
 	CNRBTREE_TEMPLATE_DECORATOR cnrbtree_##key_t##data_t##_node * cnrbtree_##key_t##data_t##_get( cnrbtree_##key_t##data_t * tree, key_t key ) \
@@ -641,32 +694,17 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic_no
 	\
 	CNRBTREE_TEMPLATE_DECORATOR cnrbtree_##key_t##data_t##_node * cnrbtree_##key_t##data_t##_access( cnrbtree_##key_t##data_t * tree, key_t key ) \
 	{\
-		cnrbtree_##key_t##data_t##_node * nil = &tree->nil; \
-		/* This function could utilize cnrbtree_##key_t##data_t##_get2 but would require an extra compare */ \
-		cnrbtree_##key_t##data_t##_node * tmp = 0;  \
-		cnrbtree_##key_t##data_t##_node * tmpnext = 0; \
-		tmp = tree->node; \
-		int cmp = 0; \
-		while( tmp != nil ) \
-		{ \
-			cmp = comparexy( key, tmp->key ); \
-			if( cmp < 0 ) tmpnext = tmp->left; \
-			else if( cmp > 0 ) tmpnext = tmp->right; \
-			else return tmp; \
-			if( tmpnext == nil ) break; \
-			tmp = tmpnext; \
-		} \
-		cnrbtree_##key_t##data_t##_node * ret; \
-		ret = (cnrbtree_##key_t##data_t##_node * ) cnrbtree_generic_insert_repair_tree_with_fixup_primary( \
-			(cnrbtree_generic_node*)tmp, (cnrbtree_generic*)tree, \
-			cmp, (int)sizeof( cnrbtree_##key_t##data_t##_node ) ); \
-		copykeyxy( ret->key, key, ret->data ); \
-		return ret; \
+        return (cnrbtree_##key_t##data_t##_node *)cnrbtree_generic_access((struct cnrbtree_generic_t *)tree, cnrbtree_##key_t##data_t##_copykey, cnrbtree_##key_t##data_t##_compare, &key, sizeof(cnrbtree_##key_t##data_t##_node));                                                                             \
 	}\
-	\
-	CNRBTREE_TEMPLATE_DECORATOR void cnrbtree_##key_t##data_t##_remove( cnrbtree_##key_t##data_t * tree, key_t key ) \
+	CNRBTREE_TEMPLATE_DECORATOR void cnrbtree_##key_t##data_t##_erase( cnrbtree_##key_t##data_t * tree, cnrbtree_##key_t##data_t##_node * tmp )                                        \
+    {                                                                         \
+        cnrbtree_generic_removebase( (cnrbtree_generic_node*) tmp, (cnrbtree_generic*)tree ); \
+        deletekeyxy( tmp->key, tmp->data ); \
+        CNRBTREE_FREE(tmp); \
+    }                                                                        \
+    CNRBTREE_TEMPLATE_DECORATOR void cnrbtree_##key_t##data_t##_remove( cnrbtree_##key_t##data_t * tree, key_t key ) \
 	{\
-		cnrbtree_##key_t##data_t##_node * nil = &tree->nil; \
+		cnrbtree_##key_t##data_t##_node * nil = cnrbtree_##key_t##data_t##_nil(); \
 		cnrbtree_##key_t##data_t##_node * tmp = 0; \
 		cnrbtree_##key_t##data_t##_node * tmpnext = 0; \
 		cnrbtree_##key_t##data_t##_node * child; \
@@ -687,13 +725,13 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic_no
 		deletekeyxy( tmp->key, tmp->data ); \
 		CNRBTREE_FREE(tmp); \
 	} \
-	CNRBTREE_TEMPLATE_DECORATOR void cnrbtree_##key_t##data_t##_destroy_node_internal( cnrbtree_##key_t##data_t * tree, cnrbtree_##key_t##data_t##_node * node ) \
+	CNRBTREE_TEMPLATE_DECORATOR __attribute__((noinline)) void cnrbtree_##key_t##data_t##_destroy_node_internal( cnrbtree_##key_t##data_t * tree, cnrbtree_##key_t##data_t##_node * node ) \
 	{\
-		cnrbtree_##key_t##data_t##_node * nil = &tree->nil; \
+		const cnrbtree_##key_t##data_t##_node * nil = cnrbtree_##key_t##data_t##_nil(); \
 		if( node == nil ) return; \
 		deletekeyxy( node->key, node->data ); \
-		if( node->left != nil ) cnrbtree_##key_t##data_t##_destroy_node_internal( tree, node->left ); \
-		if( node->right != nil ) cnrbtree_##key_t##data_t##_destroy_node_internal( tree, node->right ); \
+		cnrbtree_##key_t##data_t##_destroy_node_internal( tree, node->left ); \
+		cnrbtree_##key_t##data_t##_destroy_node_internal( tree, node->right ); \
 		CNRBTREE_FREE( node ); \
 	}\
 	CNRBTREE_TEMPLATE_DECORATOR void cnrbtree_##key_t##data_t##_destroy( cnrbtree_##key_t##data_t * tree ) \
@@ -703,19 +741,16 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic_no
 	} \
 	\
 	CNRBTREE_TEMPLATE_DECORATOR cnrbtree_##key_t##data_t * cnrbtree_##key_t##data_t##_create() \
-	{\
+	{                                                                           \
+		const cnrbtree_##key_t##data_t##_node * nil = cnrbtree_##key_t##data_t##_nil(); \
 		cnrbtree_##key_t##data_t * ret = CNRBTREE_MALLOC( sizeof( cnrbtree_##key_t##data_t ) ); \
-		ret->node = (cnrbtree_##key_t##data_t##_node *)&ret->nil; \
-		ret->tail = (cnrbtree_##key_t##data_t##_node *)&ret->nil; \
-		ret->begin = (cnrbtree_##key_t##data_t##_node *)&ret->nil; \
+		ret->node = nil;\
+		ret->tail = nil;\
+		ret->begin = nil; \
 		ret->size = 0; \
 		ret->access = cnrbtree_##key_t##data_t##_access; \
 		ret->get = cnrbtree_##key_t##data_t##_get; \
 		ret->destroy = cnrbtree_##key_t##data_t##_destroy; \
-		ret->nil.parent = &ret->nil; \
-		ret->nil.left   = &ret->nil; \
-		ret->nil.right  = &ret->nil; \
-		ret->nil.color  = CNRBTREE_COLOR_BLACK; \
 		return ret; \
 	}\
 
