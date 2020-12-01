@@ -121,7 +121,7 @@ int main()
 			free( n->data );
 			cnrbtree_strstr_erase( tree, n );
 		}
-		if( tree->node != cnrbtree_strstr_nil() )
+		if( tree->node != cnrbtree_generic_nil() )
 		{
 			printf( "Excess fault %p\n", tree->node );
 			exit( 6 );

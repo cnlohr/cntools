@@ -374,17 +374,6 @@ cnrbtree_generic_prev(cnrbtree_generic *tree, cnrbtree_generic_node *node) {
     return tmp;
 }
 
-
-CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_update_begin_end(cnrbtree_generic *tree) {
-    const cnrbtree_generic_node *nil = cnrbtree_generic_nil();
-    cnrbtree_generic_node *tmp = tree->node;
-    while (tmp->left != nil) tmp = tmp->left;
-    tree->begin = tmp;
-    tmp = tree->node;
-    while (tmp->right != nil) tmp = tmp->right;
-    tree->tail = tmp;
-}
-
 CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_rotateleft(cnrbtree_generic *tree, cnrbtree_generic_node *n) {
     /* From Wikipedia's RB Tree Page, seems slightly better than the CLRS model, but now that it's been
         modified, there seems to be very little difference between them. */
@@ -497,20 +486,26 @@ cnrbtree_generic_insert_repair_tree_with_fixup_primary(cnrbtree_generic_node *tm
         ret->parent = nil;
         ret->color = CNRBTREE_COLOR_BLACK; /* InsertCase1 from wikipedia */
         tree->node = ret;
-        cnrbtree_generic_update_begin_end(tree);
+        tree->begin = tree->tail = ret;
         return ret;
     }
     ret->parent = tmp;
 
     //XXX Should we protect 'tmp' to make sure it's not RBNIL?
-    if (cmp < 0) tmp->left = ret;
-    else tmp->right = ret;
-
+    if (cmp < 0) {
+        tmp->left = ret;
+        if(tmp == tree->begin)
+            tree->begin = ret;
+    }
+    else {
+        tmp->right = ret;
+        if(tmp == tree->tail)
+            tree->tail = ret;
+    }
     /* Here, [ret] is the new node, it's red, and [tmp] is our parent */
     if (tmp->color == CNRBTREE_COLOR_RED) {
         cnrbtree_generic_insert_repair_tree_with_fixup((cnrbtree_generic_node *) ret, (cnrbtree_generic *) tree);
     } /* Else InsertCase2 */
-    cnrbtree_generic_update_begin_end(tree);
     return ret;
 }
 
@@ -533,6 +528,11 @@ cnrbtree_generic_transplant(cnrbtree_generic *T, cnrbtree_generic_node *u, cnrbt
 //"RB-DELETE(T, z)"
 CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase(cnrbtree_generic_node *z, cnrbtree_generic *T) {
     T->size--;
+
+    if(z == T->begin)
+        T->begin = cnrbtree_generic_next(T, z);
+    if(z == T->tail)
+        T->tail = cnrbtree_generic_prev(T, z);
 
     const cnrbtree_generic_node *nil = cnrbtree_generic_nil();
     cnrbtree_generic_node *x;
@@ -641,9 +641,6 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase(cnrbtree_generic_nod
     if (T->size == 0) {
         T->node = (cnrbtree_generic_node*) nil;
     }
-
-    cnrbtree_generic_update_begin_end(T);
-    return;
 }
 
 #endif // CNRBTREE_IMPLEMENTATION
@@ -662,16 +659,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase(cnrbtree_generic_nod
         data_t data; \
     } cnrbtree_##key_t##data_t##_node; \
     struct cnrbtree_##key_t##data_t##_t; \
-    typedef struct cnrbtree_##key_t##data_t##_t \
-    { \
-        cnrbtree_##key_t##data_t##_node * node; \
-        int size; \
-        cnrbtree_##key_t##data_t##_node * (*access)( struct cnrbtree_##key_t##data_t##_t * tree, key_t key ); \
-        cnrbtree_##key_t##data_t##_node * (*get)( struct cnrbtree_##key_t##data_t##_t * tree, key_t key ); \
-        void (*destroy)( struct cnrbtree_##key_t##data_t##_t * tree ); \
-        cnrbtree_##key_t##data_t##_node * begin; \
-        cnrbtree_##key_t##data_t##_node * tail; \
-    } cnrbtree_##key_t##data_t;                  \
+    typedef cnrbtree_generic cnrbtree_##key_t##data_t;                  \
     static const cnrbtree_##key_t##data_t##_node* cnrbtree_##key_t##data_t##_nil() {                    \
     return (cnrbtree_##key_t##data_t##_node*)cnrbtree_generic_nil();\
     };                                          \
@@ -726,7 +714,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase(cnrbtree_generic_nod
   }                                    \
   CNRBTREE_TEMPLATE_DECORATOR void cnrbtree_##key_t##data_t##_destroy( cnrbtree_##key_t##data_t * tree ) \
   {                                    \
-    cnrbtree_##key_t##data_t##_destroy_node_internal( tree, tree->node ); \
+    cnrbtree_##key_t##data_t##_destroy_node_internal( tree, (cnrbtree_##key_t##data_t##_node * )tree->node ); \
     CNRBTREE_FREE( tree );                        \
   }                                    \
                                     \
