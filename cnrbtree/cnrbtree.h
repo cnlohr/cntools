@@ -240,7 +240,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase(cnrbtree_generic_nod
 
 CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node *
 cnrbtree_generic_insert_repair_tree_with_fixup_primary(cnrbtree_generic_node *tmp, cnrbtree_generic *tree, int cmp,
-                                                       int sizetoalloc);
+                                                       cnrbtree_generic_node *ret);
 
 CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node *
 cnrbtree_generic_next(cnrbtree_generic *tree, cnrbtree_generic_node *node);
@@ -248,6 +248,8 @@ cnrbtree_generic_next(cnrbtree_generic *tree, cnrbtree_generic_node *node);
 CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node *
 cnrbtree_generic_prev(cnrbtree_generic *tree, cnrbtree_generic_node *node);
 
+//cnrbtree_##key_t##data_t##_createnode
+typedef cnrbtree_generic_node * (*cnrbtree_generic_createnode)(const void *key);
 typedef int (*cnrbtree_generic_compare)(const void *key, const cnrbtree_generic_node *node);
 
 typedef void (*cnrbtree_generic_copykey)(const void *key, cnrbtree_generic_node *node);
@@ -307,16 +309,15 @@ cnrbtree_generic_get2(struct cnrbtree_generic_t *tree, cnrbtree_generic_compare 
 }
 
 CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node *
-cnrbtree_generic_access(struct cnrbtree_generic_t *tree, cnrbtree_generic_copykey copy_fn,
+cnrbtree_generic_access(struct cnrbtree_generic_t *tree, cnrbtree_generic_createnode create_fn,
                         cnrbtree_generic_compare cmp_fn, const void *key, int node_size) {
     int cmp = 0;
     cnrbtree_generic_node *tmp = cnrbtree_generic_get2(tree, cmp_fn, key, &cmp);
 
-    cnrbtree_generic_node *ret;
-    ret = (cnrbtree_generic_node *) cnrbtree_generic_insert_repair_tree_with_fixup_primary(
+    cnrbtree_generic_node *ret = create_fn(key);
+    cnrbtree_generic_insert_repair_tree_with_fixup_primary(
             (cnrbtree_generic_node *) tmp, (cnrbtree_generic *) tree,
-            cmp, (int) node_size);
-    copy_fn(key, ret);
+            cmp, ret);
     return ret;
 }
 
@@ -470,10 +471,8 @@ cnrbtree_generic_insert_repair_tree_with_fixup(cnrbtree_generic_node *z, cnrbtre
 
 CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node *
 cnrbtree_generic_insert_repair_tree_with_fixup_primary(cnrbtree_generic_node *tmp, cnrbtree_generic *tree, int cmp,
-                                                       int sizetoalloc) {
-    cnrbtree_generic_node *ret;
+                                                       cnrbtree_generic_node *ret) {
     cnrbtree_generic_node *nil = (cnrbtree_generic_node *)cnrbtree_generic_nil();
-    ret = CNRBTREE_MALLOC(sizetoalloc);
 
     ret->color = CNRBTREE_COLOR_RED;
     ret->left = nil;
@@ -668,17 +667,15 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase(cnrbtree_generic_nod
 
 #if CNRBTREE_TEMPLATECODE
 
-#define CNRBTREETEMPLATE(key_t, data_t, comparexy, copykeyxy, deletekeyxy) \
-  CNRBTREETYPETEMPLATE( key_t, data_t );                \
+#define CNRBTREETEMPLATE2(key_t, data_t, comparexy, deletekeyxy, createnode) \
   CNRBTREE_TEMPLATE_DECORATOR int cnrbtree_##key_t##data_t##_compare(const void* _key, const cnrbtree_generic_node* _node) { \
     const key_t* key = (key_t*)_key;                    \
     const cnrbtree_##key_t##data_t##_node * node = (const cnrbtree_##key_t##data_t##_node *)_node; \
     return comparexy(*key, node->key);                    \
   }                                    \
-  CNRBTREE_TEMPLATE_DECORATOR void cnrbtree_##key_t##data_t##_copykey(const void* _key, cnrbtree_generic_node* _node) {    \
+      CNRBTREE_TEMPLATE_DECORATOR cnrbtree_generic_node* cnrbtree_##key_t##data_t##_createnode(const void* _key) {    \
     const key_t* key = (key_t*)_key;                    \
-    cnrbtree_##key_t##data_t##_node * node = (cnrbtree_##key_t##data_t##_node *)_node; \
-    copykeyxy(node->key, *key, node->data);                \
+    return createnode(sizeof( cnrbtree_##key_t##data_t##_node), *key);                \
   }                                                                        \
     CNRBTREE_TEMPLATE_DECORATOR void cnrbtree_##key_t##data_t##_deletekey(cnrbtree_generic_node* _node) {    \
     cnrbtree_##key_t##data_t##_node * node = (cnrbtree_##key_t##data_t##_node *)_node; \
@@ -696,7 +693,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase(cnrbtree_generic_nod
                                     \
   CNRBTREE_TEMPLATE_DECORATOR cnrbtree_##key_t##data_t##_node * cnrbtree_##key_t##data_t##_access( cnrbtree_##key_t##data_t * tree, key_t key ) \
   {                                    \
-    return (cnrbtree_##key_t##data_t##_node *)cnrbtree_generic_access((struct cnrbtree_generic_t *)tree, cnrbtree_##key_t##data_t##_copykey, cnrbtree_##key_t##data_t##_compare, &key, sizeof(cnrbtree_##key_t##data_t##_node)); \
+    return (cnrbtree_##key_t##data_t##_node *)cnrbtree_generic_access((struct cnrbtree_generic_t *)tree, cnrbtree_##key_t##data_t##_createnode, cnrbtree_##key_t##data_t##_compare, &key, sizeof(cnrbtree_##key_t##data_t##_node)); \
   }                                    \
   CNRBTREE_TEMPLATE_DECORATOR void cnrbtree_##key_t##data_t##_erase( cnrbtree_##key_t##data_t * tree, cnrbtree_##key_t##data_t##_node * tmp ) \
   {                                    \
@@ -727,6 +724,20 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase(cnrbtree_generic_nod
     ret->destroy = cnrbtree_##key_t##data_t##_destroy;            \
     return ret;                                \
   }                                    \
+
+#define CNRBTREETEMPLATE(key_t, data_t, comparexy, copykeyxy, deletekeyxy) \
+CNRBTREETYPETEMPLATE( key_t, data_t );                \
+static inline cnrbtree_generic_node* cnrbtree_##key_t##data_t##_malloc(size_t s, key_t k) { \
+cnrbtree_##key_t##data_t##_node* node = (cnrbtree_##key_t##data_t##_node*)malloc(s);\
+copykeyxy(node->key, k, node->data);                                                                           \
+     return node;                                                     \
+                                                                           \
+}                                                                           \
+CNRBTREETEMPLATE2(key_t, data_t, comparexy, deletekeyxy, cnrbtree_##key_t##data_t##_malloc);
+
+
+#define CNRBTREETEMPLATE_MEM(key_t, data_t, comparexy, createnode, deletekeyxy) \
+CNRBTREETEMPLATE2(key_t, data_t, comparexy, deletekeyxy, createnode);
 
 #else
 #define CNRBTREETEMPLATE CNRBTREETEMPLATE_DEFINITION
