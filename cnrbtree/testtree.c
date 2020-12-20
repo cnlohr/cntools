@@ -121,7 +121,7 @@ int main()
 			free( n->data );
 			cnrbtree_strstr_remove( tree, stta[i] );
 		}
-		if( tree->node != &tree->nil )
+		if( !RBISNIL( tree->node ) )
 		{
 			printf( "Excess fault %p\n", tree->node );
 			exit( 6 );
