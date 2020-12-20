@@ -87,7 +87,7 @@ int main()
 	int i, j;
 	for( j = 0; j < 3000; j++ )
 	{
-		char stta[ITERATIONS][9];
+		char stta[ITERATIONS][9]  __attribute__((aligned(8)));
 		for( i = 0; i < ITERATIONS; i++ )
 		{
 			int k;
@@ -121,7 +121,7 @@ int main()
 			free( n->data );
 			cnrbtree_strstr_remove( tree, stta[i] );
 		}
-		if( tree->node != &tree->nil )
+		if( !RBISNIL( tree->node ) )
 		{
 			printf( "Excess fault %p\n", tree->node );
 			exit( 6 );
