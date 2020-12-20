@@ -280,24 +280,6 @@ CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_prev( cnrbtr
 	return tmp;
 }
 
-
-CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_update_begin_end( cnrbtree_generic * tree )
-{
-	cnrbtree_generic_node * nil = &cnrbtree_nil;
-	cnrbtree_generic_node * tmp = tree->node;
-	if( tmp != nil )
-	{
-		while( tmp->left != nil ) tmp = tmp->left;
-	}
-	tree->begin = tmp;
-	tmp = tree->node;
-	if( tmp != nil )
-	{
-		while( tmp->right != nil ) tmp = tmp->right;
-	}
-	tree->tail = tmp;
-}
-
 CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_rotateleft( cnrbtree_generic * tree, cnrbtree_generic_node * n )
 {
 	/* From Wikipedia's RB Tree Page, seems slightly better than the CLRS model, but now that it's been
@@ -420,21 +402,33 @@ CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_insert_repai
 		ret->parent = nil;
 		ret->color = CNRBTREE_COLOR_BLACK; /* InsertCase1 from wikipedia */
 		tree->node = ret;
-		cnrbtree_generic_update_begin_end( tree );
+		tree->begin = tree->tail = ret;
 		return ret;
 	}
 	ret->parent = tmp;
 
 	//XXX Should we protect 'tmp' to make sure it's not nil?
-	if( cmp < 0 ) tmp->left = ret;
-	else tmp->right = ret;
+    if (cmp < 0) {
+        tmp->left = ret;
+        if(tmp == tree->begin)
+		{
+            tree->begin = ret;
+		}
+    }
+    else {
+        tmp->right = ret;
+        if(tmp == tree->tail)
+		{
+            tree->tail = ret;
+		}
+    }
 
 	/* Here, [ret] is the new node, it's red, and [tmp] is our parent */ \
 	if( tmp->color == CNRBTREE_COLOR_RED )
 	{
 		cnrbtree_generic_insert_repair_tree_with_fixup( (cnrbtree_generic_node*)ret, (cnrbtree_generic*)tree );
 	} /* Else InsertCase2 */
-	cnrbtree_generic_update_begin_end( tree );
+
 	return ret;
 }
 
@@ -457,6 +451,11 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_transplant( cnrbtree_generic * 
 CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic_node * z, cnrbtree_generic * T )
 {
 	T->size--;
+
+    if(z == T->begin)
+        T->begin = cnrbtree_generic_next(T, z);
+    if(z == T->tail)
+        T->tail = cnrbtree_generic_prev(T, z);
 
 	cnrbtree_generic_node * nil = &cnrbtree_nil;
 	cnrbtree_generic_node * x;
@@ -589,7 +588,6 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic_no
 		T->node = nil;
 	}
 
-	cnrbtree_generic_update_begin_end( T );
 	return;
 }
 
@@ -654,9 +652,8 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic_no
 	{\
 		cnrbtree_##key_t##data_t##_node * nil = (cnrbtree_##key_t##data_t##_node*)&cnrbtree_nil; \
 		/* This function could utilize cnrbtree_##key_t##data_t##_get2 but would require an extra compare */ \
-		cnrbtree_##key_t##data_t##_node * tmp = 0;  \
+		cnrbtree_##key_t##data_t##_node * tmp = tree->node;  \
 		cnrbtree_##key_t##data_t##_node * tmpnext = 0; \
-		tmp = tree->node; \
 		int cmp = 0; \
 		while( tmp != nil ) \
 		{ \
