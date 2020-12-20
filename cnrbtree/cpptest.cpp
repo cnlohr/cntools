@@ -9,10 +9,10 @@ using namespace std;
 class QuickComp
 {
 public:
-	QuickComp( string s ) { str = s; }
+	QuickComp( const char* s ) { str = s; }
 	int compare( const QuickComp & rhs) const { int64_t r = *(int64_t*)str.c_str() - *(int64_t*)rhs.str.c_str(); return (r == 0) ? 0 :( ( r < 0 )? -1 : 1 ); }
-	const bool operator < ( const QuickComp & rhs ) const { return compare( rhs ) < 0 ; }
-	const bool operator == ( const QuickComp & rhs ) const { return compare( rhs ) == 0 ; }
+	bool operator < ( const QuickComp & rhs ) const { return compare( rhs ) < 0 ; }
+	bool operator == ( const QuickComp & rhs ) const { return compare( rhs ) == 0 ; }
 	string str;
 };
 
@@ -20,9 +20,9 @@ int main()
 {
 	map< QuickComp, string > tmap;
 	srand(0);
-	#define ITERATIONS 1000
+	#define ITERATIONS 10000
 	int i, j;
-	for( j = 0; j < 3000; j++ )
+	for( j = 0; j < 1000; j++ )
 	{
 		char stta[ITERATIONS][9];
 		for( i = 0; i < ITERATIONS; i++ )
@@ -44,7 +44,7 @@ int main()
 
 		for( i = 0; i < ITERATIONS; i++ )
 		{
-			map< QuickComp, string >::iterator it = tmap.find( QuickComp(stta[i]) );
+			auto it = tmap.find( QuickComp(stta[i]) );
 			if( it == tmap.end() )
 			{
 				printf( "Access fault.\n" );

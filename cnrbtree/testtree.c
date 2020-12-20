@@ -17,12 +17,23 @@ int gints = 0;
 #define intcopy(x, y, z) (x = y, gints++, z = 0 ) 
 #define intdelete( x, y )     gints--;
 
+#define nulldel(x, y)
+
 #define intcomp(x, y) ( x - y )
 #define strtest( x, y ) ((*((int64_t*)x)) == (*((int64_t*)y))?0: (((*((int64_t*)x)) - (*((int64_t*)y)))) < 0 ? - 1 : 1 )
 
 typedef char * str;
 CNRBTREETEMPLATE( int, int, intcomp, intcopy, intdelete );
-CNRBTREETEMPLATE( str, str, /*RBstrcmp*/ strtest, RBstrcpy, RBstrdel );
+//CNRBTREETEMPLATE( str, str, /*RBstrcmp*/ strtest, RBstrcpy, RBstrdel );
+CNRBTREETYPETEMPLATE( str, str );
+static inline cnrbtree_generic_node* create_strnode(size_t s, str k) {
+    size_t len = strlen(k);
+    cnrbtree_strstr_node * node = malloc(s + len + 1);
+    node->key = (str)&node[1];
+    memcpy(node->key, k, len+1);
+    return (cnrbtree_generic_node*)node;
+}
+CNRBTREETEMPLATE_MEM( str, str, strtest, create_strnode, nulldel );
 
 int PrintTree( cnrbtree_intint_node * t, int depth, cnrbtree_intint_node * parent );
 
@@ -83,11 +94,11 @@ int main()
 	cnrbtree_strstr * tree = cnrbtree_strstr_create();
 
 	srand(0);
-	#define ITERATIONS 1000
+	#define ITERATIONS 10000
 	int i, j;
-	for( j = 0; j < 3000; j++ )
+	for( j = 0; j < 1000; j++ )
 	{
-		char stta[ITERATIONS][9];
+        __attribute__((aligned(8))) char stta[ITERATIONS][16];
 		for( i = 0; i < ITERATIONS; i++ )
 		{
 			int k;
@@ -119,9 +130,9 @@ int main()
 				exit( 5 );
 			}
 			free( n->data );
-			cnrbtree_strstr_remove( tree, stta[i] );
+			cnrbtree_strstr_erase( tree, n );
 		}
-		if( tree->node != &tree->nil )
+		if( tree->node != cnrbtree_generic_nil() )
 		{
 			printf( "Excess fault %p\n", tree->node );
 			exit( 6 );
