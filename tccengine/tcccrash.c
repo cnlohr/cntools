@@ -503,10 +503,10 @@ tcccrash_syminfo * tcccrash_symget( intptr_t address )
 	{
 		cnrbtree_ptrsimi * d = i->data;
 		cnrbtree_ptrsimi_node * n = cnrbtree_ptrsimi_get2( d, address, 1 );
-		if( !n || n == &d->nil ) continue;
+		if( !n || RBISNIL( n ) ) continue;
 		if( n->data->address > address )
 			n = (void*)cnrbtree_generic_prev( (cnrbtree_generic*)d, (void*)n );
-		if( !n || n == &d->nil ) continue;
+		if( !n || RBISNIL( n ) ) continue;
 		intptr_t diff = address - n->data->address;
 		if( mindiff == 0 || ( diff < mindiff && diff < n->data->size + 16 ) )
 		{

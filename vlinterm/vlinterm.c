@@ -583,7 +583,7 @@ void ResizeScreen( struct TermStructure * ts, int neww, int newh )
 	{
 		linetaint[line] = 1;
 	}
-
+#ifdef POSIX_STUFF
 	if( ts->ptspipe )
 	{
 		struct winsize tsize;
@@ -593,6 +593,7 @@ void ResizeScreen( struct TermStructure * ts, int neww, int newh )
 		tsize.ws_ypixel = newh;
 		ioctl(ts->ptspipe, TIOCSWINSZ, &tsize);
 	}
+#endif
 	ts->cury += newh-ts->chary;
 	ts->charx = neww;
 	ts->chary = newh;
