@@ -125,9 +125,7 @@ LONG WINAPI windows_exception_handler(EXCEPTION_POINTERS * ExceptionInfo)
 			pel = (intptr_t*)ExceptionInfo->ContextRecord->Rip;
 		}
 		if( !pel ) continue;
-		printf( "PS %p\n", pel );
 		tcccrash_syminfo * sel = tcccrash_symget( (intptr_t)pel );
-		printf( "!! %p\n", sel );
 		if( sel )
 		{
 			int delta = ((uint8_t*)pel-(uint8_t*)sel->address);
