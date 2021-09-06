@@ -2,7 +2,9 @@
 // Don't forget to compile with -rdynamic.
 //
 // Stripped down version of crash handler from cnovr.
-// XXX XXX XXX THIS DOES NOT CURRENTLY WORK NEED TO DEBUG
+//
+// NOTE THIS MAY NOT WORK
+//
 // Right now, just tested in Windows.  Linux needs a little work.
 
 #ifndef _TCC_CRASH_H
@@ -85,7 +87,6 @@ LONG WINAPI windows_exception_handler(EXCEPTION_POINTERS * ExceptionInfo)
 
 	//Avoid use of heap here.
 	printf( "**CRASH**\n" );
-
 	char * stp = last_crash_text;
 	int i;
 
@@ -114,7 +115,7 @@ LONG WINAPI windows_exception_handler(EXCEPTION_POINTERS * ExceptionInfo)
 	};
 	for( i = 0; reasontable[i].reason != -1 && reasontable[i].reason != ExceptionInfo->ExceptionRecord->ExceptionCode; i++ );
 	stp += sprintf( stp, "%s\n", reasontable[i].err );
-	
+
 	intptr_t * place = (intptr_t*)ExceptionInfo->ContextRecord->Rsp;
 	for( i = 0; i < 200; i++ )
 	{
@@ -124,7 +125,9 @@ LONG WINAPI windows_exception_handler(EXCEPTION_POINTERS * ExceptionInfo)
 			pel = (intptr_t*)ExceptionInfo->ContextRecord->Rip;
 		}
 		if( !pel ) continue;
+		printf( "PS %p\n", pel );
 		tcccrash_syminfo * sel = tcccrash_symget( (intptr_t)pel );
+		printf( "!! %p\n", sel );
 		if( sel )
 		{
 			int delta = ((uint8_t*)pel-(uint8_t*)sel->address);
@@ -425,7 +428,8 @@ int num_known_symbols;
 //This consumes symadd, it will handle freeing it later.
 void tcccrash_symset( tcccrash_syminfo * symadd )
 {
-	known_symbols = realloc( known_symbols, sizeof( tcccrash_syminfo * ) * num_known_symbols + 1 );
+	if( !symadd ) return;
+	known_symbols = realloc( known_symbols, sizeof( tcccrash_syminfo * ) * (num_known_symbols + 1) );
 	known_symbols[num_known_symbols++] = symadd;	
 }
 
@@ -437,6 +441,7 @@ tcccrash_syminfo * tcccrash_symget( intptr_t address )
 	for( i = 0; i < num_known_symbols; i++ )
 	{
 		tcccrash_syminfo * ths = known_symbols[i];
+		if( !ths ) continue;
 		intptr_t diff = address - ths->address;
 		if( diff > 0 && diff < mindiff )
 		{
