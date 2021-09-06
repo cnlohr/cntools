@@ -2,7 +2,7 @@
 // Don't forget to compile with -rdynamic.
 //
 // Stripped down version of crash handler from cnovr.
-//
+// XXX XXX XXX THIS DOES NOT CURRENTLY WORK NEED TO DEBUG
 // Right now, just tested in Windows.  Linux needs a little work.
 
 #ifndef _TCC_CRASH_H
