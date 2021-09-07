@@ -3,9 +3,7 @@
 //
 // Stripped down version of crash handler from cnovr.
 //
-// NOTE THIS MAY NOT WORK
-//
-// Right now, just tested in Windows.  Linux needs a little work.
+// Tested on Linux and Windows
 
 #ifndef _TCC_CRASH_H
 #define _TCC_CRASH_H
@@ -194,10 +192,11 @@ int tccbacktrace(void **buffer, int size, void * specbp) {
 }
 
 uint8_t signalstack[CRASHDUMPSTACKSIZE];
-void * btrace[MAXBTDEPTH];
+void * glb_btrace[MAXBTDEPTH];
 
 void sighandler(int sig,  siginfo_t *info, struct sigcontext ctx)
 {
+	static uint8_t in_crash_handler;
 	//Avoid use of heap here, minimize stack use, too.
 	static const char * thiscrash;
 	thiscrash = "unknown";
@@ -218,18 +217,18 @@ void sighandler(int sig,  siginfo_t *info, struct sigcontext ctx)
 
 	//For untracked threads.
 
-	if( cp->in_crash_handler == 1 )
+	if( in_crash_handler == 1 )
 	{
 		printf( "Double-crash. Cannot recover.\n" );
 		exit( -1 );
 	}
 
-	cp->in_crash_handler = 1;
-	cp->did_crash = sig;
+	in_crash_handler = 1;
+	//cp->did_crash = sig;
 	tcccrash_syminfo * sel;
 	char * stp = last_crash_text;
 	char * stpstart = stp;
-	void ** btrace = cp->btrace;
+	void ** btrace = glb_btrace;
 	int i;
 
 #ifdef __aarch64__
@@ -335,12 +334,12 @@ void sighandler(int sig,  siginfo_t *info, struct sigcontext ctx)
 
 		if( stp - stpstart > CRASHDUMPBUFFER - 1024 ) break; //Just in case it's waaay too long
 	}
-	printf( "Crash handler complete. Continuing execution\n" );
+	printf( "Crash handler complete.\n" );
 finishup:
-	cp->in_crash_handler = 0;
-	if( cp->can_jump ) siglongjmp( cp->jmpbuf, sig );
+	in_crash_handler = 0;
+//	if( cp->can_jump ) siglongjmp( cp->jmpbuf, sig );
 	printf( "Untracked thread crashed.\n" );
-	puts( cp->lastcrash );
+	puts( stpstart );
 	exit( -1 );
 }
 
@@ -370,7 +369,7 @@ static void SetupCrashHandler()
     sa.sa_handler = (void*)sighandler;//void sighandler(int sig, struct sigcontext ctx)
 
 	stack_t ss;
-	ss.ss_sp = scratchcp.signalstack;
+	ss.ss_sp = signalstack;
 	ss.ss_flags = 0;
 	ss.ss_size = CRASHDUMPSTACKSIZE;
 	sigaltstack( &ss, 0);
@@ -762,5 +761,4 @@ int EnumerateSymbols( SymEnumeratorCallback cb )
 
 
 #endif
-
 
