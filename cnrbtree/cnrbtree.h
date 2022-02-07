@@ -62,7 +62,7 @@
   these types.  I.e.
 
      //Constructs the tree
-     cnrbtree_strint * tree = cnrbtree_strobject_create();
+     cnrbtree_strobject * tree = cnrbtree_strobject_create();
 
      //Accesses, like C++ map's [] operator.
      RBA( tree, "a" ).myvalue = 5;
@@ -74,7 +74,7 @@
      printf( "%d\n", RBA(tree, "c").myvalue );
 
      //Iterate through them all.
-     RBFOREACH( str_payload, tree, i )
+     RBFOREACH( strobject, tree, i )
      {
          printf( ".key = %s .myvalue = %d\n", i->key, i->data.myvalue );
      }
@@ -185,7 +185,7 @@
 #define RBA(x,y) (x->access)( x, y )->data
 #define RBHAS(x,y) ((x->get)( x, y ))
 #define RBDESTROY(x) (x->destroy)( x )
-#define RBFOREACH( type, tree, i ) for( cnrbtree_##type##_node * i = tree->begin; RBISNIL( i ); i = (cnrbtree_##type##_node *)cnrbtree_generic_next( (cnrbtree_generic*)tree, (cnrbtree_generic_node *)i ) )
+#define RBFOREACH( type, tree, i ) for( cnrbtree_##type##_node * i = tree->begin; !RBISNIL( i ); i = (cnrbtree_##type##_node *)cnrbtree_generic_next( (cnrbtree_generic*)tree, (cnrbtree_generic_node *)i ) )
 #endif
 
 struct cnrbtree_generic_node_t;
@@ -815,4 +815,5 @@ typedef cnrbtree_rbstrset_trbstrset_t cnstrstrmap;
 #endif
 
 #endif
+
 
