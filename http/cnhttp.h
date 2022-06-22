@@ -10,7 +10,9 @@ extern uint16_t  curlen;
 extern uint8_t   wsmask[4];
 extern uint8_t   wsmaskplace;
 
-
+#ifndef CNHTTP_MTU
+#define CNHTTP_MTU 1536
+#endif
 
 uint8_t WSPOPMASK();
 #define HTTPPOP (*curdata++)

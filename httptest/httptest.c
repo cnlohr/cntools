@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdlib.h>
+#include <sys/socket.h>
 #include "http_bsd.h"
 #include "cnhttp.h"
 
@@ -19,11 +21,31 @@ static void huge()
 	uint8_t i = 0;
 
 	DataStartPacket();
+/*
+	// Mode 1: The fully cross-platform way.  (~1 Gbit/s)
 	do
 	{
 		PushByte( 0 );
 		PushByte( i );
 	} while( ++i ); //Tricky:  this will roll-over to 0, and thus only execute 256 times.
+*/
+
+/*
+	// Mode 2: Assuming the BSD Sockets backend. (~1.7 Gbit/s)
+	uint8_t buffer[CNHTTP_MTU] = { 0 };
+	memcpy( databuff_ptr, buffer, sizeof( buffer ) );
+ 	databuff_ptr += CNHTTP_MTU;
+*/
+
+	// Mode 3: Just directly access the socket. (~21 Gbit/s)
+	int socket_id = curhttp-HTTPConnections;
+	int sock = http_bsd_sockets[socket_id];
+
+	if( TCPCanSend( sock, 65536 ) )
+	{
+		uint8_t buffer[65536] = { 0 };
+		send( sock, buffer, 65536, MSG_NOSIGNAL );
+	}
 
 	EndTCPWrite( curhttp->socket );
 }
@@ -43,10 +65,10 @@ static void echo()
 
 static void issue()
 {
-	uint8_t  __attribute__ ((aligned (32))) buf[1300];
-	int len = URLDecode( buf, 1300, curhttp->pathbuffer+9 );
+	uint8_t  __attribute__ ((aligned (32))) buf[CNHTTP_MTU];
+	int len = URLDecode( buf, CNHTTP_MTU, curhttp->pathbuffer+9 );
 	printf( "%d\n", len );
-//	int r = issue_command(buf, 1300, buf, len );
+//	int r = issue_command(buf, CNHTTP_MTU, buf, len );
 	int r = 10;
 	if( r > 0 )
 	{
@@ -88,7 +110,7 @@ static void WSEchoData(  int len )
 
 static void WSCommandData(  int len )
 {
-	uint8_t  __attribute__ ((aligned (32))) buf[1300];
+	uint8_t  __attribute__ ((aligned (32))) buf[CNHTTP_MTU];
 	int i;
 
 	for( i = 0; i < len; i++ )
@@ -96,7 +118,7 @@ static void WSCommandData(  int len )
 		buf[i] = WSPOPMASK();
 	}
 
-	//i = issue_command(buf, 1300, buf, len );
+	//i = issue_command(buf, CNHTTP_MTU, buf, len );
 	if( i < 0 ) i = 0;
 
 	WebSocketSend( buf, i );
@@ -161,6 +183,11 @@ void HTTPCustomStart( )
 		curhttp->bytesleft = 0xfffffffe;
 	}
 	else
+	if( strncmp( (const char*)curhttp->pathbuffer, "/d/exit", 7 ) == 0 )
+	{
+		exit(0);
+	}
+	else
 	{
 		curhttp->rcb = 0;
 		curhttp->bytesleft = 0;
@@ -177,7 +204,6 @@ int main()
 	while(1)
 	{
 		TickHTTP();
-		usleep( 30000 );
 	}
 }
 

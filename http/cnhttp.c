@@ -137,7 +137,7 @@ static void DoHTTP( uint8_t timed )
 		break;
 	case HTTP_STATE_DATA_XFER:
 		curhttp->send_pending = 1;
-		if( TCPCanSend( curhttp->socket, 1300 ) ) //TCPDoneSend
+		if( TCPCanSend( curhttp->socket, CNHTTP_MTU ) ) //TCPDoneSend
 		{
 			if( curhttp->is_dynamic )
 			{
@@ -165,7 +165,7 @@ static void DoHTTP( uint8_t timed )
 		break;
 	case HTTP_STATE_DATA_WEBSOCKET:
 		curhttp->send_pending = 0;
-		if( TCPCanSend( curhttp->socket, 1300 ) ) //TCPDoneSend
+		if( TCPCanSend( curhttp->socket, CNHTTP_MTU ) ) //TCPDoneSend
 		{
 			WebSocketTickInternal();
 		}

@@ -24,7 +24,7 @@ uint16_t htons(uint16_t hostshort);
 static  int serverSocket;
 
 uint8_t * databuff_ptr;
-uint8_t   databuff[1536];
+uint8_t   databuff[CNHTTP_MTU];
 int cork_binary_rx;
 
 
@@ -36,7 +36,7 @@ int cork_binary_rx;
 #define DESTROY_SOCKETS_LIST 200
 int destroy_sockets[DESTROY_SOCKETS_LIST];
 int destroy_socket_head = 0;
-int sockets[HTTP_CONNECTIONS];
+int http_bsd_sockets[HTTP_CONNECTIONS];
 
 void et_espconn_disconnect( int socket )
 {
@@ -45,10 +45,10 @@ void et_espconn_disconnect( int socket )
 	//printf( "Shut: %d\n", socket );
 	for( i = 0; i < HTTP_CONNECTIONS; i++ )
 	{
-		if( sockets[i] == socket )
+		if( http_bsd_sockets[i] == socket )
 		{
 			http_disconnetcb( i );
-			sockets[i] = 0;
+			http_bsd_sockets[i] = 0;
 		}
 	}
 
@@ -193,8 +193,8 @@ int TickHTTP()
 		allpolls[0].events = POLLIN;
 		for( i = 0; i < HTTP_CONNECTIONS;i ++)
 		{
-			if( !sockets[i] || HTTPConnections[i].state == 0 ) continue;
-			allpolls[pollct].fd = sockets[i];
+			if( !http_bsd_sockets[i] || HTTPConnections[i].state == 0 ) continue;
+			allpolls[pollct].fd = http_bsd_sockets[i];
 			allpolls[pollct].events = POLLIN | (HTTPConnections[i].send_pending?POLLOUT:0);
 			mappedhttp[pollct] = i;
 			pollct++;
@@ -209,7 +209,7 @@ int TickHTTP()
 			closesocket( serverSocket );
 			for( i = 0; i < HTTP_CONNECTIONS;i ++)
 			{
-				if( sockets[i] ) closesocket( sockets[i] );
+				if( http_bsd_sockets[i] ) closesocket( http_bsd_sockets[i] );
 			}
 			break;
 		}
@@ -244,7 +244,7 @@ int TickHTTP()
 			}
 			else
 			{
-				sockets[r] = tsocket;
+				http_bsd_sockets[r] = tsocket;
 			}
 		}
 		for( i = 1; i < pollct; i++)
@@ -253,15 +253,15 @@ int TickHTTP()
 			if( allpolls[i].revents & (POLLERR|POLLHUP) )
 			{
 				http_disconnetcb( wc );
-				closesocket( sockets[wc] );
-				sockets[wc] = 0;
+				closesocket( http_bsd_sockets[wc] );
+				http_bsd_sockets[wc] = 0;
 			}
 			else if( allpolls[i].revents & POLLIN )
 			{
 				int dco = HTTPConnections[i].corked_data_place;
 				uint8_t data[8192];
 				memcpy( data, HTTPConnections[i].corked_data, dco );
-				int len = recv( sockets[wc], data+dco, 8192-dco, 0 );
+				int len = recv( http_bsd_sockets[wc], data+dco, 8192-dco, 0 );
 				if( len )
 				{
 					cork_binary_rx = 0;
@@ -272,8 +272,8 @@ int TickHTTP()
 						if( to_cork > sizeof( HTTPConnections[i].corked_data ) + HTTPConnections[i].corked_data_place )
 						{
 							http_disconnetcb( wc );
-							closesocket ( sockets[wc] );
-							sockets[wc] = 0;
+							closesocket ( http_bsd_sockets[wc] );
+							http_bsd_sockets[wc] = 0;
 							fprintf( stderr, "Error: too much data to buffer on websocket\n" );
 						}
 						else
@@ -290,8 +290,8 @@ int TickHTTP()
 				else
 				{
 					http_disconnetcb( wc );
-					closesocket( sockets[wc] );
-					sockets[wc] = 0;
+					closesocket( http_bsd_sockets[wc] );
+					http_bsd_sockets[wc] = 0;
 				}
 			}
 		}

@@ -3,6 +3,8 @@
 
 #include "cnhttp.h"
 
+extern int http_bsd_sockets[HTTP_CONNECTIONS];
+
 //Call this to start your webserver.
 int RunHTTP( int port );
 int TickHTTP(); //returns -1 if problem.
