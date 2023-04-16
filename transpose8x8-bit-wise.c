@@ -59,6 +59,10 @@ int main()
 	t = (b ^ (b >>18)) & 0x00003333; b = b ^ t ^ (t <<18); 
 	ta = (a & 0x0F0F0F0F) | ((b << 4) & 0xF0F0F0F0);
 	tb = ((a >> 4) & 0x0F0F0F0F) | (b & 0xF0F0F0F0);
+
+	// Alternatively if you need swapped nibbles...
+	ta = (a & cF0F0F0F0) | ((b & cF0F0F0F0 ) >> 4);
+	tb = ((a << 4) & cF0F0F0F0) | (b & (cF0F0F0F0>>4));
 #endif
 	PrintBin( ta );
 	PrintBin( tb );
