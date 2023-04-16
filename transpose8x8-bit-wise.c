@@ -28,7 +28,7 @@ int main()
 	
 	
 #if 1
-	// Reverse Willmore
+	// Reverse Willmore (Mirror both ways)
 	ta = ((a & 0xF0F0F0F0) ) | ((b & 0xF0F0F0F0) >> 4);
 	tb = ((a & 0x0F0F0F0F) << 4 ) | ((b & 0x0F0F0F0F) );
 	ta = (ta & 0xCCCC3333) | (((ta>>14)|(ta<<14)) & 0x3333CCCC);
@@ -52,7 +52,7 @@ int main()
 	ta = (a & 0xF0F0F0F0) | ((b >> 4) & 0x0F0F0F0F);
 	tb = ((a << 4) & 0xF0F0F0F0) | (b & 0x0F0F0F0F);
 #elif 1
-	// Reverse-stack-overflow.
+	// Reverse-stack-overflow.  (Mirror both ways)
 	t = (a ^ (a >> 9)) & 0x00550055; a = a ^ t ^ (t << 9); 
 	t = (b ^ (b >> 9)) & 0x00550055; b = b ^ t ^ (t << 9); 
 	t = (a ^ (a >>18)) & 0x00003333; a = a ^ t ^ (t <<18); 
