@@ -774,7 +774,7 @@ typedef cnrbtree_rbset_trbset_null_t cnptrset;
 //Note, you need a pre-defined void * for the type in the iteration. i.e. void * i; cnptrfset_foreach( tree, i );
 #define cnptrset_foreach( tree, i ) \
 	for( cnrbtree_rbset_trbset_null_t_node * node##i = tree->begin; \
-		i = (node##i)->key, node##i != &cnrbtree_nil; \
+		(node##i != &cnrbtree_nil) && (i = (node##i)->key) != 0; \
 		node##i = (cnrbtree_rbset_trbset_null_t_node *)cnrbtree_generic_next( (cnrbtree_generic*)tree, (cnrbtree_generic_node *)node##i ) )
 
 

@@ -248,7 +248,7 @@ void HandleButton( int x, int y, int button, int bDown )
 }
 
 void HandleMotion( int x, int y, int mask ) { }
-void HandleDestroy() { }
+int HandleDestroy() { return 0; }
 
 
 uint32_t TermColor( uint32_t incolor, int color, int attrib )

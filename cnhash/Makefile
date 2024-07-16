@@ -1,6 +1,6 @@
 all : cnhashtest
 
-cnhashtest :  cnhashtest.c cnhash.c
+cnhashtest :  cnhashtest.c
 	gcc -o $@ $^ -g -O0
 
 clean :

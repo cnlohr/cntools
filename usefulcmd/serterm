@@ -1,0 +1,8 @@
+#!/bin/bash
+stty -F /dev/ttyUSB0 115200 -echo raw clocal
+cat /dev/ttyUSB0
+#set -m
+#cat /dev/ttyUSB0 &
+#sleep .1
+#reset
+#fg

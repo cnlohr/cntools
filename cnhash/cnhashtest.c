@@ -1,8 +1,9 @@
-#include "cnhash.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 
+#define CNHASH_IMPLEMENTATION
+#include "cnhash.h"
 
 int main()
 {
@@ -23,8 +24,8 @@ int main()
 	CNHashInsert( h, strdup("hello"), strdup("hello3") );
 	CNHashInsert( h, strdup("hello"), strdup("hello2") );
 
-	printf( "%s\n", (char*)CNHashGetValue( h,  "hello" ) );
-	printf( "%p\n", (char*)CNHashGetValue( h,  "world" ) );
+	printf( "%s\n", (char*)CNHashGetValue( h, "hello" ) );
+	printf( "%p\n", (char*)CNHashGetValue( h, "world" ) );
 
 
 	int nrvalues;

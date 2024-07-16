@@ -1,7 +1,7 @@
 all : vlintermtest
 
 RAWDRAW:=../rawdraw/CNFGXDriver.c ../rawdraw/CNFGFunctions.c
-CFLAGS:=-I..  -I../rawdraw -Os -s -m32
+CFLAGS:=-I..  -I../rawdraw -Os -s
 
 vlintermtest : vlinterm.c vlintermtest.c $(RAWDRAW)
 	gcc -o $@ $^ $(CFLAGS) -lX11 -lpthread -lutil
