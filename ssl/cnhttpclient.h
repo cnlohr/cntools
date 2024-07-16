@@ -10,6 +10,7 @@ struct cnhttpclientrequest
 
 	const char * URL; //May be "http(s)://...com/" or just "/index.html" if host + port is specified.
 	const char * AddedHeaders; //Terminate each header (EXCEPT FOR LAST) with \r\n
+	const char * Proxy;
 
 	void * AuxData;    //For Websockets, this is the "Origin" URL.  Otherwise, it's Post data.
 	int AuxDataLength;
