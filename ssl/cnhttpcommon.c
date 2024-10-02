@@ -22,25 +22,28 @@ unsigned char hex2byte( const char * data )
 int CNURLEncode( char * encodeinto, int maxlen, const char * buf, int buflen )
 {
 	int i = 0;
-	for( ; buf && *buf; buf++ )
+	const char * end = buf + buflen;
+	if( buf )
 	{
-		char c = *buf;
-		if( c == ' ' )
+		for( ; buf != end; buf++ )
 		{
-			encodeinto[i++] = '+';
+			char c = *buf;
+			if( i >= maxlen - 3 )  break;
+			if( c == ' ' )
+			{
+				encodeinto[i++] = '+';
+			}
+			else if( c < 46 || c > 126 || c == 96 )
+			{
+				encodeinto[i++] = '%';
+				encodeinto[i++] = tohex1buff[c>>4];
+				encodeinto[i++] = tohex1buff[c&15];
+			}
+			else
+			{
+				encodeinto[i++] = c;
+			}
 		}
-		else if( c < 46 || c > 126 || c == 96 )
-		{
-			encodeinto[i++] = '%';
-			encodeinto[i++] = tohex1buff[c>>4];
-			encodeinto[i++] = tohex1buff[c&15];
-			break;
-		}
-		else
-		{
-			encodeinto[i++] = c;
-		}
-		if( i >= maxlen - 3 )  break;
 	}
 	encodeinto[i] = 0;
 	return i;
