@@ -1,4 +1,4 @@
-/* cnrbtree.h - v0.1pre - public domain C templated Red-Black Tree -
+/* cnrbtree.h - v0.2 - public domain C templated Red-Black Tree -
        https://github.com/cnlohr/cntools/cnrbtree
        no warranty implied; use at your own risk
 
