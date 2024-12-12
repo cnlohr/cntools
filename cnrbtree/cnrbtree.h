@@ -154,9 +154,9 @@
 #include <stdlib.h>
 #endif
 
-//For creating trees and nodes
+//For creating trees and nodes - is best if data is initialized to zero, so things like RBA() default to 0.
 #ifndef CNRBTREE_MALLOC
-#define CNRBTREE_MALLOC malloc
+#define CNRBTREE_MALLOC( size ) calloc( 1, size );
 #endif
 
 //For freeing trees and nodes.
