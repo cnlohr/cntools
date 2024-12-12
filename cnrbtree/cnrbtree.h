@@ -1,4 +1,4 @@
-/* cnrbtree.h - v0.2 - public domain C templated Red-Black Tree -
+/* cnrbtree.h - v0.1pre - public domain C templated Red-Black Tree -
        https://github.com/cnlohr/cntools/cnrbtree
        no warranty implied; use at your own risk
 
@@ -142,6 +142,9 @@
     3) No need to do complicated transplants/
     4) No need to copy data (this is evil if we're templating our types)
 
+  Change List:
+    * 2024-12-12 Flip order of arguments to cnrbtree_generic_removebase, add RBREMOVE and RBGET.
+
 */
 
 
@@ -154,9 +157,9 @@
 #include <stdlib.h>
 #endif
 
-//For creating trees and nodes - is best if data is initialized to zero, so things like RBA() default to 0.
+//For creating trees and nodes - is best if data is initialized to zero.
 #ifndef CNRBTREE_MALLOC
-#define CNRBTREE_MALLOC( size ) calloc( 1, size );
+#define CNRBTREE_MALLOC(size) calloc( 1, size )
 #endif
 
 //For freeing trees and nodes.
@@ -184,7 +187,9 @@
 #ifndef NO_RBA
 #define RBA(x,y) (x->access)( x, y )->data
 #define RBHAS(x,y) ((x->get)( x, y ))
+#define RBGET(x,y) ((x->get)( x, y ))
 #define RBDESTROY(x) (x->destroy)( x )
+#define RBREMOVE(x,y) (cnrbtree_generic_removebase((cnrbtree_generic*)(x),(cnrbtree_generic_node*)(y)))
 #define RBFOREACH( type, tree, i ) for( cnrbtree_##type##_node * i = tree->begin; !RBISNIL( i ); i = (cnrbtree_##type##_node *)cnrbtree_generic_next( (cnrbtree_generic*)tree, (cnrbtree_generic_node *)i ) )
 #endif
 
@@ -214,7 +219,7 @@ typedef struct cnrbtree_generic_t
 #define CNRBTREE_COLOR_RED   1
 #define CNRBTREE_COLOR_BLACK 2
 
-CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic_node * n, cnrbtree_generic * t );
+CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic * t, cnrbtree_generic_node * n );
 CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_insert_repair_tree_with_fixup_primary( cnrbtree_generic_node * tmp, cnrbtree_generic * tree, int cmp, int sizetoalloc );
 CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_next( cnrbtree_generic *tree ,cnrbtree_generic_node * node );
 CNRBTREE_GENERIC_DECORATOR cnrbtree_generic_node * cnrbtree_generic_prev( cnrbtree_generic *tree ,cnrbtree_generic_node * node );
@@ -448,7 +453,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_transplant( cnrbtree_generic * 
 }
 
 //"RB-DELETE(T, z)"
-CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic_node * z, cnrbtree_generic * T )
+CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic * T, cnrbtree_generic_node * z )
 {
 	T->size--;
 
@@ -691,7 +696,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic_no
 			tmp = tmpnext; \
 		} \
 		/* found an item, tmp, to delete. */ \
-		cnrbtree_generic_removebase( (cnrbtree_generic_node*) tmp, (cnrbtree_generic*)tree ); \
+		cnrbtree_generic_removebase( (cnrbtree_generic*)tree, (cnrbtree_generic_node*) tmp ); \
 		deletekeyxy( tmp->key, tmp->data ); \
 		CNRBTREE_FREE(tmp); \
 	} \
