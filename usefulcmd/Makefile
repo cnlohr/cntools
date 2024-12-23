@@ -1,4 +1,5 @@
 TARGETS:=slowpipe hex2eng scatter2svg chexdump synczcat prependtime
+EXTRAS:=serterm
 
 all : $(TARGETS)
 
@@ -20,8 +21,8 @@ scatter2svg : scatter2svg.o
 synczcat : synczcat.c
 	gcc -O2 -o $@ $^ -lz -s
 
-install :
-	sudo cp $(TARGETS) /usr/local/bin/
+install : $(TARGETS)
+	sudo cp $(TARGETS) $(EXTRAS) /usr/local/bin/
 
 clean :
 	rm -rf $(TARGETS) *.o *~

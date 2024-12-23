@@ -12,7 +12,6 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <arpa/inet.h>
 
 #define MAX_RESPONSE_LENGTH 25000000
 
@@ -42,57 +41,79 @@ struct cnhttpclientresponse * CNHTTPClientTransact( struct cnhttpclientrequest *
 
 	memset( ret, 0, sizeof( *ret ) );
 
-	     if( strncmp( urlptr, "ws://", 5 ) == 0 )    { is_websocket = 1; is_http_string = 5; }
-	else if( strncmp( urlptr, "wss://", 6 ) == 0 )   { is_websocket = 1; is_secure = 1; is_http_string = 6; }
-	else if( strncmp( urlptr, "http://", 7 ) == 0 )  { is_http_string = 7; }
-	else if( strncmp( urlptr, "https://", 8 ) == 0 ) { is_http_string = 8; is_secure = 1; }
-
-	if( is_http_string  )
+	if( r->Proxy )
 	{
-		urlptr += is_http_string;
-		int expectingport = 0;
-
-		for( i = 0; urlptr[i]; i++ )
+		// Need selport and selhost from proxy.
+		int i;
+		int proxylen = strlen( r->Proxy );
+		selport = 80;
+		if( selhost ) free( selhost);
+		selhost = strdup( r->Proxy );
+		for( i = 0; i < proxylen; i++ )
 		{
-			if( (expectingport = (urlptr[i] == ':')) || urlptr[i] == '/' )
+			if( r->Proxy[i] == ':' )
 			{
-				if( reqhost )
-				{
-					free( reqhost );
-				}
-				reqhost = malloc( i+1 );
-				memcpy( reqhost, urlptr, i );
-				reqhost[i] = 0;
-
-				if( !selhost )
-				{
-					selhost = strdup( reqhost );
-				}
-				if( !expectingport )
-					break;
+				selport = atoi( r->Proxy + i + 1 );
+				selhost[i] = 0;
 			}
 		}
+	}
+	else
+	{
+			 if( strncmp( urlptr, "ws://", 5 ) == 0 )    { is_websocket = 1; is_http_string = 5; }
+		else if( strncmp( urlptr, "wss://", 6 ) == 0 )   { is_websocket = 1; is_secure = 1; is_http_string = 6; }
+		else if( strncmp( urlptr, "http://", 7 ) == 0 )  { is_http_string = 7; }
+		else if( strncmp( urlptr, "https://", 8 ) == 0 ) { is_http_string = 8; is_secure = 1; }
 
-		if( expectingport )
+		if( is_http_string  )
 		{
-			i++;
-			for( ; urlptr[i]; i++ )
+			urlptr += is_http_string;
+			int expectingport = 0;
+			int expportpl = 0;
+
+			for( i = 0; urlptr[i]; i++ )
 			{
-				if( urlptr[i] == '/' ) break;
-			}
-			int pt = atoi( urlptr );
-			if( !selport ) selport = pt;
-		}
-		else if( !selport )
-		{
-			selport = is_secure?443:80;
-		}
+				if( (expectingport = (urlptr[i] == ':')) || urlptr[i] == '/' )
+				{
+					if( reqhost )
+					{
+						free( reqhost );
+					}
+					reqhost = malloc( i+1 );
+					memcpy( reqhost, urlptr, i );
+					reqhost[i] = 0;
 
-		urlptr += i;
+					if( !selhost )
+					{
+						selhost = strdup( reqhost );
+					}
+
+					if( expectingport )
+						expportpl = i;
+					else
+						break;
+				}
+			}
+			if( expportpl )
+			{
+				i = expportpl + 1;
+				int oi = i;
+				for( ; urlptr[i]; i++ )
+				{
+					if( urlptr[i] == '/' ) break;
+				}
+				int pt = atoi( urlptr + oi );
+				if( !selport ) selport = pt;
+			}
+			else if( !selport )
+			{
+				selport = is_secure?443:80;
+			}
+			urlptr += i;
+		}
 	}
 
-	//printf( "Connecting: %s/%s : %d\n", reqhost, selhost, selport );
-
+	//printf( "Connecting: %s/%s/%s : %d\n", reqhost, selhost, urlptr, urlptr );
 	//urlptr now contains "/index.html"
 	//selhost contains the string of the actual hostname to connect to (must be free'd)
 	//selport contains the port number to connect to.
@@ -202,23 +223,23 @@ struct cnhttpclientresponse * CNHTTPClientTransact( struct cnhttpclientrequest *
 				if( !firstresp ) break;
 				firstresp++;
 				responsecode = atoi( firstresp );
-				char * cl = strcasestr( ret->fullheader, "Content-Length:" );
+				char * cl = strstr( ret->fullheader, "Content-Length:" );
 				if( cl )
 				{
 					contentlength = atoi( cl + 15 );
 				}
 
-				cl = strcasestr( ret->fullheader, "Connection: Close" );
+				cl = strstr( ret->fullheader, "Connection: Close" );
 				if( cl )
 				{
 					connectionmode = 1;
 				}
-				cl = strcasestr( ret->fullheader, "Transfer-Encoding: chunked" );
+				cl = strstr( ret->fullheader, "Transfer-Encoding: chunked" );
 				if( cl )
 				{
 					ischunked = 1;
 				}
-				currentcontent += responselength - k;
+				currentcontent += responselength - k - 1;
 				//puts( ret->fullheader );
 				if( responsecode == 101 && is_websocket ) break;
 			}
@@ -264,7 +285,7 @@ struct cnhttpclientresponse * CNHTTPClientTransact( struct cnhttpclientrequest *
 		} while( 1 );
 
 		ret->payload[payloadpl] = 0;
-		ret->payloadlen = payloadpl;
+		ret->payloadlen = (payloadpl>0)?(payloadpl-1):0;
 	}
 
 	//XXX Hack: Some webservers will say "chunked" but they don't really mean it.
@@ -277,7 +298,7 @@ struct cnhttpclientresponse * CNHTTPClientTransact( struct cnhttpclientrequest *
 	}
 	free( response );
 
-//	printf( "RESP: %s %d %d %d\n", ret->payload, responselength, ret->payloadlen, ischunked );
+	//printf( "RESP: %s %d %d %d\n", ret->payload, responselength, ret->payloadlen, ischunked );
 	if( is_websocket )
 	{
 		ret->underlying_connection = c;

@@ -142,6 +142,9 @@
     3) No need to do complicated transplants/
     4) No need to copy data (this is evil if we're templating our types)
 
+  Change List:
+    * 2024-12-12 Flip order of arguments to cnrbtree_generic_removebase, add RBREMOVE and RBGET.
+
 */
 
 

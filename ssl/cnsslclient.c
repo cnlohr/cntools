@@ -1,14 +1,21 @@
 //Don't fortget to apt-get install libssl-dev
 //#include <openssl/applink.c>
+
+#if defined(WINDOWS) || defined( WIN32 ) || defined( WIN64 )
+#include "winsock2.h"
+#include <string.h>
+#define MSG_NOSIGNAL 0
+#else
 #include <openssl/bio.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <unistd.h>
-#include <stdio.h>
-#include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
+#endif
+#include <stdio.h>
+#include <sys/types.h>
 #include <string.h>
 #include "cnsslclient.h"
 
@@ -16,8 +23,12 @@ static uint8_t did_ssl_init;
 
 struct cnsslinternal
 {
+#if !defined(WINDOWS) && !defined( WIN32 ) && !defined( WIN64 )
 	SSL_CTX * ctx;
 	SSL     * c;
+#else
+	int ctx, c;
+#endif
 	int       sock;
 };
 
@@ -39,10 +50,9 @@ cnsslclient CNSSLMakeClient( const char * hostname, int portno, int encrypt )
 		return 0;
 	}
 
-	bzero((char *) &serveraddr, sizeof(serveraddr));
+	memset((char *) &serveraddr, 0, sizeof(serveraddr));
 	serveraddr.sin_family = AF_INET;
-	bcopy((char *)server->h_addr, 
-	(char *)&serveraddr.sin_addr.s_addr, server->h_length);
+	memcpy((char *)&serveraddr.sin_addr.s_addr, (char *)server->h_addr, server->h_length);
 	serveraddr.sin_port = htons(portno);
 
     if (connect(sockfd, (struct sockaddr*)&serveraddr, sizeof(serveraddr)) < 0) 
@@ -52,12 +62,19 @@ cnsslclient CNSSLMakeClient( const char * hostname, int portno, int encrypt )
 		return 0;
 	}
 
+	struct cnsslinternal * intl = malloc( sizeof( struct cnsslinternal ) );
 
-	SSL_CTX *sslctx = 0;
-	SSL *cSSL = 0;
-
+#if defined(WINDOWS) || defined( WIN32 ) || defined( WIN64 )
 	if( encrypt )
 	{
+		fprintf( stderr, "ERROR: SSL Not currently supported in Win32\n" );
+		return 0;
+	}
+#else
+	if( encrypt )
+	{
+		SSL_CTX *sslctx = 0;
+		SSL *cSSL = 0;
 		if( !did_ssl_init )
 		{
 			SSL_load_error_strings();
@@ -76,35 +93,48 @@ cnsslclient CNSSLMakeClient( const char * hostname, int portno, int encrypt )
 		if( SSL_connect(cSSL) <= 0 )
 		{
 			fprintf( stderr, "SSL Attach failed.\n" );
+			free( intl );
 			return 0;
 		}
+		intl->c = cSSL;
+		intl->ctx = sslctx;
+	}
+	else
+#endif
+	{
+		intl->c = 0;
+		intl->ctx = 0;
 	}
 
-	struct cnsslinternal * intl = malloc( sizeof( struct cnsslinternal ) );
-	intl->c = cSSL;
 	intl->sock = sockfd;
-	intl->ctx = sslctx;
 	return intl;
 }
 
 void CNSSLClose( cnsslclient c )
 {
 	struct cnsslinternal * intl = c;
+
+#if defined(WINDOWS) || defined( WIN32 ) || defined( WIN64 )
+	closesocket( intl->sock );
+#else
 	if( intl->c )   SSL_shutdown(intl->c);
 	close( intl->sock );
 	if( intl->c )   SSL_free(intl->c);
 	if( intl->ctx ) SSL_CTX_free( intl->ctx );
+#endif
 	free( intl );
 }
 
 int CNSSLWrite( cnsslclient c, const void * data, int length )
 {
 	struct cnsslinternal * intl = c;
+#if !defined(WINDOWS) && !defined( WIN32 ) && !defined( WIN64 )
 	if( intl->c )
 	{
 		return SSL_write(intl->c, data, length);
 	}
 	else
+#endif
 	{
 		return send( intl->sock, data, length, MSG_NOSIGNAL );
 	}
@@ -113,11 +143,13 @@ int CNSSLWrite( cnsslclient c, const void * data, int length )
 int CNSSLRead( cnsslclient c, void * data, int maxlen )
 {
 	struct cnsslinternal * intl = c;
+#if !defined(WINDOWS) && !defined( WIN32 ) && !defined( WIN64 )
 	if( intl->c )
 	{
 		return SSL_read(intl->c, data, maxlen);
 	}
 	else
+#endif
 	{
 		return recv( intl->sock, data, maxlen, 0 );
 	}
@@ -125,6 +157,7 @@ int CNSSLRead( cnsslclient c, void * data, int maxlen )
 
 void CNSSLShutdown()
 {
+#if !defined(WINDOWS) && !defined( WIN32 ) && !defined( WIN64 )
 	if( did_ssl_init )
 	{
 		ERR_free_strings();
@@ -132,5 +165,6 @@ void CNSSLShutdown()
 		CRYPTO_cleanup_all_ex_data();
 	    ERR_remove_thread_state(0);
 	}
+#endif
 	did_ssl_init = 0;
 }
