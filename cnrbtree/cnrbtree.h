@@ -193,6 +193,10 @@
 #define RBFOREACH( type, tree, i ) for( cnrbtree_##type##_node * i = tree->begin; !RBISNIL( i ); i = (cnrbtree_##type##_node *)cnrbtree_generic_next( (cnrbtree_generic*)tree, (cnrbtree_generic_node *)i ) )
 #endif
 
+#ifdef CNRBTREE_IMPLEMENTATION
+	#include <stdint.h> // Needed for some of the functionality in this file.
+#endif
+
 struct cnrbtree_generic_node_t;
 typedef struct cnrbtree_generic_node_t
 {
@@ -767,7 +771,6 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic * 
 typedef void * rbset_t;
 typedef char rbset_null_t[0];
 #ifdef CNRBTREE_IMPLEMENTATION
-	#include <stdint.h>
 	CNRBTREETEMPLATE( rbset_t, rbset_null_t, RBptrcmp, RBptrcpy, RBnullop );
 #else
 	CNRBTREETEMPLATE_DEFINITION( rbset_t, rbset_null_t, RBptrcmp, RBptrcpy, RBnullop );
