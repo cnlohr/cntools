@@ -1,4 +1,4 @@
-/* cnrbtree.h - v0.1pre - public domain C templated Red-Black Tree -
+/* cnrbtree.h - v0.2 - public domain C templated Red-Black Tree -
        https://github.com/cnlohr/cntools/cnrbtree
        no warranty implied; use at your own risk
 
@@ -144,7 +144,7 @@
 
   Change List:
     * 2024-12-12 Flip order of arguments to cnrbtree_generic_removebase, add RBREMOVE and RBGET.
-
+    * 2025-02-07 Add stdint.h by default.
 */
 
 
@@ -767,6 +767,7 @@ CNRBTREE_GENERIC_DECORATOR void cnrbtree_generic_removebase( cnrbtree_generic * 
 typedef void * rbset_t;
 typedef char rbset_null_t[0];
 #ifdef CNRBTREE_IMPLEMENTATION
+	#include <stdint.h>
 	CNRBTREETEMPLATE( rbset_t, rbset_null_t, RBptrcmp, RBptrcpy, RBnullop );
 #else
 	CNRBTREETEMPLATE_DEFINITION( rbset_t, rbset_null_t, RBptrcmp, RBptrcpy, RBnullop );
