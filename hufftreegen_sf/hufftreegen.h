@@ -51,10 +51,10 @@ int main()
 {
 	int i, j, k;
 
-	// Generate a random distribution of 31 unique values, weighted towards lower numbers.
+	// Generate a random distribution of 5 unique values, weighted towards lower numbers.
 	for( i = 0; i < NELEM; i++ )
 	{
-		data_to_compress[i] = (rand()%6)*(rand()%6)*(rand()%6);
+		data_to_compress[i] = (rand()%3)*(rand()%3)*(rand()%3);
 	}
 
 	hufftype * vals = 0;
