@@ -29,22 +29,27 @@ int main()
 	srand(1);
 	for( i = 0; i < 1024; i++ )
 	{
-		real[i] = sin( i ) * 16380000; //(rand()%10001)-5000;
-		imag[i] = cos( i ) * 16380000; //(rand()%10001)-5000;
+		real[i] = sin( i ) * ((1LL<<16)-1); //(rand()%10001)-5000;
+		imag[i] = cos( i ) * ((1LL<<16)-1); //(rand()%10001)-5000;
 	}
 	
+
 	if( fix_fft( real, imag, M, 0 ) ) goto fail;
+	for( i = 0; i < 1024; i++ )
+		printf( "%d, %d\n", real[i], imag[i] );
 
 	if( fix_fft( real, imag, M, 1 ) ) goto fail;
+
+
 
 	srand(1);
 
 	uint64_t total_deviation = 0;
 	for( i = 0; i < 1024; i++ )
 	{
-		int rcheck = sin( i ) * 16380000; //(rand()%10001)-5000;
-		int icheck = cos( i ) * 16380000; //(rand()%10001)-5000;
-//		printf( "%d  %d\n", rcheck, real[i] );
+		int rcheck = sin( i ) * ((1LL<<16)-1); //(rand()%10001)-5000;
+		int icheck = cos( i ) * ((1LL<<16)-1); //(rand()%10001)-5000;
+		//if( i < 50 ) printf( "%d  %d\n", rcheck, real[i] );
 		total_deviation +=
 			deviation( real[i], rcheck ) +
 			deviation( imag[i], icheck );
