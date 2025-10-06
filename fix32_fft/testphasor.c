@@ -1,7 +1,62 @@
 #include <stdint.h>
 #include <stdio.h>
+#include <math.h>
 
 
+
+int main()
+{
+	int i;
+
+	int rstop = 40;
+	float desired =  3.14159*2.0/16.0;
+
+	float a = 1000000;// * cos(-desired);
+	float b = 0;//1000000 * sin(-desired);
+
+	float d = desired - 0.02003065; // TUNE ME!!!
+	float amptune = 2*cos(desired);
+
+	float dsquareddiv2 = d * d / 2.0;
+
+	// Similar to // https://amycoders.org/tutorials/sintables.html  (The Harmonical Oscilator Approach)
+	for( i = 0; i <= rstop; i++ )
+	{
+		a = a + b;
+		float aadjust = a * dsquareddiv2;
+		b = b - aadjust;
+		printf( "%f,%f\n", a, b*amptune );
+		b = b - aadjust;
+	}
+}
+
+
+#if 0
+
+int main()
+{
+	int i;
+	float a = -1000000 * sin(0.801/2.0); // TUNE ME
+	float b = 1000000;
+
+	int rstop = 40;
+	double omega = 0.0;
+
+	float d = 3.14159*2.0/8.0;           // TUNE ME
+	for( i = 0; i <= rstop; i++ )
+	{
+		a = a + b * d * 0.5;
+		printf( "%f,%f\n", a, b );        // TUNE AMP
+		a = a + b * d * 0.5;
+		b = b - a * d;
+
+		omega += 0.05;
+	}
+}
+
+#endif
+
+#if 0
 int main()
 {
 	int i;
@@ -42,4 +97,5 @@ int main()
 		omega += 0.05;
 	}
 }
+#endif
 
