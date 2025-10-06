@@ -8,7 +8,7 @@
 
 #include "fix32_fft.h"
 
-#define M 10
+#define M 12
 
 uint64_t deviation( int a, int b )
 {
@@ -27,28 +27,26 @@ int main()
 	int i;
 
 	srand(1);
-	for( i = 0; i < 1024; i++ )
+	for( i = 0; i < 4096; i++ )
 	{
-		real[i] = sin( i ) * ((1LL<<16)-1); //(rand()%10001)-5000;
-		imag[i] = cos( i ) * ((1LL<<16)-1); //(rand()%10001)-5000;
+		real[i] = sin( i ) * ((1LL<<19)-1); //(rand()%10001)-5000;
+		imag[i] = cos( i ) * ((1LL<<19)-1); //(rand()%10001)-5000;
 	}
-	
 
 	if( fix_fft( real, imag, M, 0 ) ) goto fail;
-	for( i = 0; i < 1024; i++ )
-		printf( "%d, %d\n", real[i], imag[i] );
-
+//	fix_shift( real, imag, M, 6 );
 	if( fix_fft( real, imag, M, 1 ) ) goto fail;
+//	fix_shift( real, imag, M, 6 );
 
-
+//	fix_decimate( real, imag, M, 0 );
 
 	srand(1);
 
 	uint64_t total_deviation = 0;
-	for( i = 0; i < 1024; i++ )
+	for( i = 0; i < 4096; i++ )
 	{
-		int rcheck = sin( i ) * ((1LL<<16)-1); //(rand()%10001)-5000;
-		int icheck = cos( i ) * ((1LL<<16)-1); //(rand()%10001)-5000;
+		int rcheck = sin( i ) * ((1LL<<19)-1); //(rand()%10001)-5000;
+		int icheck = cos( i ) * ((1LL<<19)-1); //(rand()%10001)-5000;
 		//if( i < 50 ) printf( "%d  %d\n", rcheck, real[i] );
 		total_deviation +=
 			deviation( real[i], rcheck ) +

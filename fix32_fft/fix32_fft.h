@@ -19,6 +19,9 @@ int fix_fft( int32_t fr[], int32_t fi[], int m, int inverse);
 // Multiply 2 32-bit numbers
 inline int32_t FIX_MPY(int32_t a, int32_t b)
 
+// To keep the FFT in range, you will need to decimate the values.
+int fix_decimate( int32_t * fr, int32_t * fi, int m, int decimate ); 
+
 Options:
 
 //  Do precise rounding in multiply. This prevents a tendency towards zero. For
@@ -116,6 +119,8 @@ Options:
 int fix_fftr( int32_t fr[], int m, int inverse );
 
 int fix_fft( int32_t fr[], int32_t fi[], int m, int inverse);
+
+void fix_shift( int32_t * fr, int32_t * fi, int m, int shift );
 
 static inline int32_t FIX_MPY(int32_t a, int32_t b)
 {
@@ -698,6 +703,7 @@ int fix_fft( int32_t fr[], int32_t fi[], int M, int inverse )
 
 	l = 1;
 	k = LOG2_N_WAVE-1;
+
 	while( l < N )
 	{
 		istep = l << 1;
@@ -724,21 +730,29 @@ int fix_fft( int32_t fr[], int32_t fi[], int M, int inverse )
 				// 4x load
 				// 4x mulh + 2x add/sub
 				// 2x shifts
-				// 4x add/sub 
+				// 4x add/sub
 				// 4x store
 				tr = FIX_MPY(wr,tmpr) - FIX_MPY(wi,tmpi);
 				ti = FIX_MPY(wr,tmpi) + FIX_MPY(wi,tmpr);
-
+//printf( "%d %d\n", tr, ti );
 				qr = fr[i];
 				qi = fi[i];
 
+// TODO: Did original script place this before or after 
 #ifndef FIX32_FFT_PRECISEROUNDING
 				// If we aren't doing precise rounding, shift back up here.
-				tr<<=1;
-				ti<<=1;
-#endif
-
-#if 0
+				if( inverse )
+				{
+					// You cannot just shift one or the other here. They must be paired.
+					qr >>= 1;
+					qi >>= 1;
+				}
+				else
+				{
+					tr <<= 1;
+					ti <<= 1;
+				}
+#else
 				// Old way - Decimate signal as running.
 				// Adds more branches.  By default, frequency space is more
 				// bit-crunched.
@@ -750,6 +764,7 @@ int fix_fft( int32_t fr[], int32_t fi[], int M, int inverse )
 					qr >>= 1;
 					qi >>= 1;
 				}
+
 #endif
 
 				fr[j] = qr - tr;
@@ -769,13 +784,13 @@ int fix_fft( int32_t fr[], int32_t fi[], int M, int inverse )
 	{
 		if( !inverse )
 		{
-			fr[l]>>=(M+1)/2;
-			fi[l]>>=(M+1)/2;
+//			fr[l]>>=(M+1)/2;
+//			fi[l]>>=(M+1)/2;
 		}
 		else
 		{
-			fr[l]>>=M/2;
-			fi[l]>>=M/2;
+//			fr[l]>>=M/2;
+//			fi[l]>>=M/2;
 		}
 	}
 #endif
@@ -805,6 +820,39 @@ int fix_fftr( int32_t f[], int m, int inverse )
 		ret = fix_fft(fi, fr, m-1, inverse);
 	}
 	return ret;
+}
+
+void fix_shift( int32_t * fr, int32_t * fi, int m, int shift )
+{
+	int N = 1<<m;
+	int i;
+	if( shift < 0 )
+	{
+		shift = -shift;
+		if( fr )
+		{
+			for( i = 0; i < N; i++ )
+				fr[i]>>=shift;
+		}
+		if( fi )
+		{
+			for( i = 0; i < N; i++ )
+				fi[i]>>=shift;
+		}
+	}
+	else
+	{
+		if( fr )
+		{
+			for( i = 0; i < N; i++ )
+				fr[i]<<=shift;
+		}
+		if( fi )
+		{
+			for( i = 0; i < N; i++ )
+				fi[i]<<=shift;
+		}
+	}
 }
 
 #endif
