@@ -1,4 +1,4 @@
-/* cnrbtree.h - v0.1pre - public domain C templated Red-Black Tree -
+/* cnrbtree.h - v0.2 - public domain C templated Red-Black Tree -
        https://github.com/cnlohr/cntools/cnrbtree
        no warranty implied; use at your own risk
 
@@ -144,7 +144,7 @@
 
   Change List:
     * 2024-12-12 Flip order of arguments to cnrbtree_generic_removebase, add RBREMOVE and RBGET.
-
+    * 2025-02-07 Add stdint.h by default.
 */
 
 
@@ -191,6 +191,10 @@
 #define RBDESTROY(x) (x->destroy)( x )
 #define RBREMOVE(x,y) (cnrbtree_generic_removebase((cnrbtree_generic*)(x),(cnrbtree_generic_node*)(y)))
 #define RBFOREACH( type, tree, i ) for( cnrbtree_##type##_node * i = tree->begin; !RBISNIL( i ); i = (cnrbtree_##type##_node *)cnrbtree_generic_next( (cnrbtree_generic*)tree, (cnrbtree_generic_node *)i ) )
+#endif
+
+#ifdef CNRBTREE_IMPLEMENTATION
+	#include <stdint.h> // Needed for some of the functionality in this file.
 #endif
 
 struct cnrbtree_generic_node_t;
