@@ -5,22 +5,22 @@ THIS IS A WORK IN PROGRESS. IN THE CURRENT STATE THIS FILE IS NOT LICENSED
   fix32_fft.h - single-file-header fixed-point in-place Fast Fourier Transform
   geared for embedded, and/or power-reduced 32-bit integer system.
 
-  This comes from the fix_fft.c lineage, but is a complete rewrite.  You can
+  This comes from the fix_fft.c lineage, but is basically a rewrite.  You can
   see a copy of it here: https://gist.github.com/Tomwi/3842231 
 
 #define FIX32_FFT_IMPLEMENTATION
 
 // Perform a real-only FFT
-int fix_fftr( int32_t fr[], int m, int inverse );
+int fix32_fftr( int32_t fr[], int m, int inverse, int shrink );
 
 // Perform a full FFT.
-int fix_fft( int32_t fr[], int32_t fi[], int m, int inverse);
+int fix32_fft( int32_t fr[], int32_t fi[], int m, int inverse, int shrink);
 
 // Multiply 2 32-bit numbers
 inline int32_t FIX_MPY(int32_t a, int32_t b)
 
 // To keep the FFT in range, you will need to decimate the values.
-int fix_decimate( int32_t * fr, int32_t * fi, int m, int decimate ); 
+int fix32_decimate( int32_t * fr, int32_t * fi, int m, int decimate ); 
 
 Options:
 
@@ -116,11 +116,11 @@ Options:
 
 #include <stdint.h>
 
-int fix_fftr( int32_t fr[], int m, int inverse );
+int fix32_fftr( int32_t fr[], int m, int inverse, int shrink );
 
-int fix_fft( int32_t fr[], int32_t fi[], int m, int inverse);
+int fix32_fft( int32_t fr[], int32_t fi[], int m, int inverse, int shrink );
 
-void fix_shift( int32_t * fr, int32_t * fi, int m, int shift );
+void fix32_shift( int32_t * fr, int32_t * fi, int m, int shift );
 
 static inline int32_t FIX_MPY(int32_t a, int32_t b)
 {
@@ -142,7 +142,7 @@ static inline int32_t FIX_MPY(int32_t a, int32_t b)
 #define N_WAVE      4096    /* full length of Sinewave[] */
 #define LOG2_N_WAVE 12      /* log2(N_WAVE) */
 
-int32_t Sinewave[N_WAVE-N_WAVE/4] = {
+int32_t Fix32Sinewave[N_WAVE-N_WAVE/4] = {
           0,     3294197,     6588386,     9882560,    13176711,    16470831, 
    19764912,    23058947,    26352927,    29646845,    32940694,    36234465, 
    39528150,    42821743,    46115235,    49408618,    52701886,    55995029, 
@@ -657,7 +657,7 @@ int32_t Sinewave[N_WAVE-N_WAVE/4] = {
 -2147392687, -2147420480, -2147443220, -2147460906, -2147473540, -2147481120, 
 };
 
-int fix_fft( int32_t fr[], int32_t fi[], int M, int inverse )
+int fix32_fft( int32_t fr[], int32_t fi[], int M, int inverse, int shrink )
 {
 	// Compute N from _m_
 	int N = 1 << M;
@@ -667,7 +667,7 @@ int fix_fft( int32_t fr[], int32_t fi[], int M, int inverse )
 		return -1;
 
 	int mr, nn, i, j, l, k, istep, m;
-	int32_t qr, qi, tr, ti, wr, wi;
+	int32_t qr, qi, tr, ti, wr, wi, tmpr, tmpi;
 
 	mr = 0;
 	nn = N - 1;
@@ -712,8 +712,8 @@ int fix_fft( int32_t fr[], int32_t fi[], int M, int inverse )
 		{
 			j = m << k; // 0 <= j < N_WAVE/2
 
-			wr =  Sinewave[j+N_WAVE/4];
-			wi = -Sinewave[j];
+			wr =  Fix32Sinewave[j+N_WAVE/4];
+			wi = -Fix32Sinewave[j];
 
 			if (inverse)
 			{
@@ -724,24 +724,32 @@ int fix_fft( int32_t fr[], int32_t fi[], int M, int inverse )
 			{
 				j = i + l;
 
-				int32_t tmpr = fr[j];
-				int32_t tmpi = fi[j];
+				tmpr = fr[j];
+				tmpi = fi[j];
 
-				// 4x load
-				// 4x mulh + 2x add/sub
-				// 2x shifts
-				// 4x add/sub
-				// 4x store
+				// 4x load -> 4x mulh + 2x add/sub -> 2x shifts -> 4x add/sub -> 4x store
 				tr = FIX_MPY(wr,tmpr) - FIX_MPY(wi,tmpi);
 				ti = FIX_MPY(wr,tmpi) + FIX_MPY(wi,tmpr);
-//printf( "%d %d\n", tr, ti );
+
 				qr = fr[i];
 				qi = fi[i];
 
-// TODO: Did original script place this before or after 
-#ifndef FIX32_FFT_PRECISEROUNDING
+#ifdef FIX32_FFT_PRECISEROUNDING
+
+				// Old way - Decimate signal as running.
+				// Adds more branches.  By default, frequency space is more
+				// bit-crunched.
+				if( shrink )
+				{
+					// You cannot just shift one or the other here. They must be paired.
+					tr >>= 1;
+					ti >>= 1;
+					qr >>= 1;
+					qi >>= 1;
+				}
+#else
 				// If we aren't doing precise rounding, shift back up here.
-				if( inverse )
+				if( shrink )
 				{
 					// You cannot just shift one or the other here. They must be paired.
 					qr >>= 1;
@@ -752,19 +760,6 @@ int fix_fft( int32_t fr[], int32_t fi[], int M, int inverse )
 					tr <<= 1;
 					ti <<= 1;
 				}
-#else
-				// Old way - Decimate signal as running.
-				// Adds more branches.  By default, frequency space is more
-				// bit-crunched.
-				if( inverse )
-				{
-					// You cannot just shift one or the other here. They must be paired.
-					tr >>= 1;
-					ti >>= 1;
-					qr >>= 1;
-					qi >>= 1;
-				}
-
 #endif
 
 				fr[j] = qr - tr;
@@ -778,51 +773,35 @@ int fix_fft( int32_t fr[], int32_t fi[], int M, int inverse )
 		l = istep;
 	}
 
-#if 1
-	// Spread the precision loss between the inverse and the forward.
-	for ( l = 0; l <= nn; ++l )
-	{
-		if( !inverse )
-		{
-//			fr[l]>>=(M+1)/2;
-//			fi[l]>>=(M+1)/2;
-		}
-		else
-		{
-//			fr[l]>>=M/2;
-//			fi[l]>>=M/2;
-		}
-	}
-#endif
-
 	return 0;
 }
 
-int fix_fftr( int32_t f[], int m, int inverse )
+int fix32_fftr( int32_t f[], int m, int inverse, int shrink )
 {
-	int i, N = 1<<(m-1), ret = 0;
+	int t, i, N = 1<<(m-1), ret = 0;
 	int32_t tt, *fr = f, *fi = &f[N];
 
-	if( inverse )
+	for( t = 0; t < 2; t++ )
 	{
-		ret = fix_fft(fi, fr, m-1, inverse);
+		if( inverse == t )
+		{
+			for( i = 1; i < N; i += 2 )
+			{
+				tt = f[N+i-1];
+				f[N+i-1] = f[i];
+				f[i] = tt;
+			}
+		}
+		else
+		{
+			ret = fix32_fft( fi, fr, m-1, inverse, shrink );
+		}
 	}
 
-	for( i = 1; i < N; i += 2 )
-	{
-		tt = f[N+i-1];
-		f[N+i-1] = f[i];
-		f[i] = tt;
-	}
-
-	if( !inverse)
-	{
-		ret = fix_fft(fi, fr, m-1, inverse);
-	}
 	return ret;
 }
 
-void fix_shift( int32_t * fr, int32_t * fi, int m, int shift )
+void fix32_shift( int32_t * fr, int32_t * fi, int m, int shift )
 {
 	int N = 1<<m;
 	int i;
