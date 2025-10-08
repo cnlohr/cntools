@@ -11,10 +11,10 @@ THIS IS A WORK IN PROGRESS. IN THE CURRENT STATE THIS FILE IS NOT LICENSED
 #define FIX32_FFT_IMPLEMENTATION
 
 // Perform a real-only FFT
-int fix32_fftr( int32_t fr[], int m, int inverse, int shrink );
+int fix32_fftr( int32_t fr[], int m, int inverse );
 
 // Perform a full FFT.
-int fix32_fft( int32_t fr[], int32_t fi[], int m, int inverse, int shrink);
+int fix32_fft( int32_t fr[], int32_t fi[], int m, int inverse );
 
 // Multiply 2 32-bit numbers
 inline int32_t FIX_MPY(int32_t a, int32_t b)
@@ -116,9 +116,9 @@ Options:
 
 #include <stdint.h>
 
-int fix32_fftr( int32_t fr[], int m, int inverse, int shrink );
+int fix32_fftr( int32_t fr[], int m, int inverse );
 
-int fix32_fft( int32_t fr[], int32_t fi[], int m, int inverse, int shrink );
+int fix32_fft( int32_t fr[], int32_t fi[], int m, int inverse );
 
 void fix32_shift( int32_t * fr, int32_t * fi, int m, int shift );
 
@@ -657,31 +657,29 @@ int32_t Fix32Sinewave[N_WAVE-N_WAVE/4] = {
 -2147392687, -2147420480, -2147443220, -2147460906, -2147473540, -2147481120, 
 };
 
-int fix32_fft( int32_t fr[], int32_t fi[], int M, int inverse, int shrink )
+int fix32_fft( int32_t fr[], int32_t fi[], int M, int inverse )
 {
 	// Compute N from _m_
 	int N = 1 << M;
+	int nn = N - 1;
 
-	// max FFT size = N_WAVE
-	if (N > N_WAVE)
+	// Make sure we aren't too big.
+	if( M > LOG2_N_WAVE )
 		return -1;
 
-	int mr, nn, i, j, l, k, istep, m;
-	int32_t qr, qi, tr, ti, wr, wi, tmpr, tmpi;
+	int i, j, l;
 
-	mr = 0;
-	nn = N - 1;
-
-	// FFTs want the data fields to be scrabmled on input.
+	// FFTs want the input data fields to be fractally flipped.
 	for ( l = 1; l <= nn; ++l )
 	{
 #if LOG2_N_WAVE <= 16
 		// Hacker's delight addendum (not in first edition) "rev11a" bit reversal.
-		// Only works for up to 16 bits.  buuuttt thankfully, that's all we have.
-		mr = l | ((l & 0x000000FF) << 16);
-		k = mr & 0x0F0F0F0F; mr = (k <<  8) | (k ^ mr);
-		k = mr & 0x33333333; mr = (k <<  4) | (k ^ mr);
-		k = mr & 0x55555555; mr = (k <<  2) | (k ^ mr);
+		// Only works for up to 16 bits.
+		uint32_t tmp;
+		uint32_t mr = l | ((l & 0x000000FF) << 16);
+		tmp = mr & 0x0F0F0F0F; mr = (tmp <<  8) | (tmp ^ mr);
+		tmp = mr & 0x33333333; mr = (tmp <<  4) | (tmp ^ mr);
+		tmp = mr & 0x55555555; mr = (tmp <<  2) | (tmp ^ mr);
 		mr = mr >> (31-M);
 #else
 		// Hacker's delight for bit reversal, "rev1" - basic bit reversal
@@ -690,82 +688,103 @@ int fix32_fft( int32_t fr[], int32_t fi[], int M, int inverse, int shrink )
 		tmp = (tmp & 0x0F0F0F0F) <<  4 | (tmp & 0xF0F0F0F0) >>  4;
 		tmp = (tmp & 0x00FF00FF) <<  8 | (tmp & 0xFF00FF00) >>  8;
 		tmp = (tmp & 0x0000FFFF) << 16 | (tmp & 0xFFFF0000) >> 16;
-		mr = tmp >> 32-M;
+		uint32_t mr = tmp >> 32-M;
 #endif
 
-		// Don't swap already swapped
+		// Make sure when we swap, we don't swap them back.
 		if (mr <= l) continue;
-
-		// Swap fr[m] <=> fr[mr]
-		tr = fr[l]; fr[l] = fr[mr]; fr[mr] = tr;
-		ti = fi[l]; fi[l] = fi[mr]; fi[mr] = ti;
+	
+		int32_t tswap;
+		tswap = fr[l]; fr[l] = fr[mr]; fr[mr] = tswap;
+		tswap = fi[l]; fi[l] = fi[mr]; fi[mr] = tswap;
 	}
 
 	l = 1;
-	k = LOG2_N_WAVE-1;
+	int k = LOG2_N_WAVE-1;
 
 	while( l < N )
 	{
-		istep = l << 1;
+		int istep = l << 1;
+		int m;
 
 		for( m = 0; m < l; ++m )
 		{
 			j = m << k; // 0 <= j < N_WAVE/2
 
-			wr =  Fix32Sinewave[j+N_WAVE/4];
-			wi = -Fix32Sinewave[j];
+			int32_t wr =  Fix32Sinewave[j+N_WAVE/4];
+			int32_t wi = -Fix32Sinewave[j];
 
 			if (inverse)
 			{
 				wi = -wi;
 			}
 
-			for( i = m; i < N; i += istep )
+			// Depending on behavior, choose one of two major loops.
+			// We decide if we want to shrink or allow it to naturally grow.
+			// For now, we do an even-odd operation, so that the amplitude
+			// is approximately maintained across FFT/IFFT
+			if( k & 1 )
+			//if( !shrink )
 			{
-				j = i + l;
-
-				tmpr = fr[j];
-				tmpi = fi[j];
-
-				// 4x load -> 4x mulh + 2x add/sub -> 2x shifts -> 4x add/sub -> 4x store
-				tr = FIX_MPY(wr,tmpr) - FIX_MPY(wi,tmpi);
-				ti = FIX_MPY(wr,tmpi) + FIX_MPY(wi,tmpr);
-
-				qr = fr[i];
-				qi = fi[i];
-
-#ifdef FIX32_FFT_PRECISEROUNDING
-
-				// Old way - Decimate signal as running.
-				// Adds more branches.  By default, frequency space is more
-				// bit-crunched.
-				if( shrink )
+				// Don't shrink odd waves
+				for( i = m; i < N; i += istep )
 				{
-					// You cannot just shift one or the other here. They must be paired.
-					tr >>= 1;
-					ti >>= 1;
-					qr >>= 1;
-					qi >>= 1;
-				}
-#else
-				// If we aren't doing precise rounding, shift back up here.
-				if( shrink )
-				{
-					// You cannot just shift one or the other here. They must be paired.
-					qr >>= 1;
-					qi >>= 1;
-				}
-				else
-				{
+					j = i + l;
+
+					int32_t tmpr = fr[j];
+					int32_t tmpi = fi[j];
+
+					// 4x load -> 4x mulh + 2x add/sub -> 2x shifts -> 4x add/sub -> 4x store
+					int32_t tr = FIX_MPY(wr,tmpr) - FIX_MPY(wi,tmpi);
+					int32_t ti = FIX_MPY(wr,tmpi) + FIX_MPY(wi,tmpr);
+
+					// Here's where the top/bottom loop depart.
+#ifndef FIX32_FFT_PRECISEROUNDING
 					tr <<= 1;
 					ti <<= 1;
-				}
 #endif
 
-				fr[j] = qr - tr;
-				fi[j] = qi - ti;
-				fr[i] = qr + tr;
-				fi[i] = qi + ti;
+					int32_t qr = fr[i];
+					int32_t qi = fi[i];
+
+					fr[j] = qr - tr;
+					fi[j] = qi - ti;
+					fr[i] = qr + tr;
+					fi[i] = qi + ti;
+				}
+			}
+			else
+			{
+
+				// Shrink even waves.
+				for( i = m; i < N; i += istep )
+				{
+					j = i + l;
+
+					int32_t tmpr = fr[j];
+					int32_t tmpi = fi[j];
+
+					int32_t tr = FIX_MPY(wr,tmpr) - FIX_MPY(wi,tmpi);
+					int32_t ti = FIX_MPY(wr,tmpi) + FIX_MPY(wi,tmpr);
+
+#ifdef FIX32_FFT_PRECISEROUNDING
+					tr >>= 1;
+					ti >>= 1;
+#endif
+
+					int32_t qr = fr[i];
+					int32_t qi = fi[i];
+
+					// If we aren't doing precise rounding, shift back up here.
+					// You cannot just shift one or the other here. They must be paired.
+					qr >>= 1;
+					qi >>= 1;
+
+					fr[j] = qr - tr;
+					fi[j] = qi - ti;
+					fr[i] = qr + tr;
+					fi[i] = qi + ti;
+				}
 			}
 		}
 
@@ -776,7 +795,7 @@ int fix32_fft( int32_t fr[], int32_t fi[], int M, int inverse, int shrink )
 	return 0;
 }
 
-int fix32_fftr( int32_t f[], int m, int inverse, int shrink )
+int fix32_fftr( int32_t f[], int m, int inverse )
 {
 	int t, i, N = 1<<(m-1), ret = 0;
 	int32_t tt, *fr = f, *fi = &f[N];
@@ -794,7 +813,7 @@ int fix32_fftr( int32_t f[], int m, int inverse, int shrink )
 		}
 		else
 		{
-			ret = fix32_fft( fi, fr, m-1, inverse, shrink );
+			ret = fix32_fft( fi, fr, m-1, inverse );
 		}
 	}
 
