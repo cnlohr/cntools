@@ -8,25 +8,61 @@ int main()
 {
 	int i;
 
-	int rstop = 40;
-	float desired =  3.14159*2.0/16.0;
+	int rstop = 8192;
+	double deltaomega = 3.1415926535*2.0/rstop;
 
-	float a = 1000000;// * cos(-desired);
-	float b = 0;//1000000 * sin(-desired);
+	int32_t d = ((1ULL<<31)-1) * (deltaomega);
+	int32_t dsq = ((1ULL<<31)-1) * (deltaomega*deltaomega);
 
-	float d = desired - 0.02003065; // TUNE ME!!!
-	float amptune = 2*cos(desired);
+	int32_t a = (1ULL<<30)-1;
+	int32_t b = 0;
 
-	float dsquareddiv2 = d * d / 2.0;
+	// for rstop=32
+	//dsq = dsq-265650;
+	//b = b + 20623729;
+	//a = a - 20605845;
+
+	dsq = dsq+1;
+	b = b + 315;
+	a = a - 315;
+
+	double omega = 0;
+//	float amptune = 2*cos(deltaomega);
 
 	// Similar to // https://amycoders.org/tutorials/sintables.html  (The Harmonical Oscilator Approach)
 	for( i = 0; i <= rstop; i++ )
 	{
+
+		// a' = a + b
+		// b = b - d^2a'
+
 		a = a + b;
-		float aadjust = a * dsquareddiv2;
-		b = b - aadjust;
-		printf( "%f,%f\n", a, b*amptune );
-		b = b - aadjust;
+		int32_t aadj = (((a * (int64_t)dsq)>>32));
+		b = b - aadj;
+
+		int32_t bval = ((int64_t)b * -86593307)>>16;
+		printf( "%d %d / targ (%d %d) err (%d %d)\n", a, bval, (int)(cos(omega)*1073741824), (int)(sin(omega)*1073741824), (int)(a-cos(omega)*1073741824), (int)(bval-sin(omega)*1073741824) );
+		b = b - aadj;
+
+#if 0
+#if 0
+		int emarkadjust = (((int64_t)a*d)>>32)>>1;
+		b = b - emarkadjust;
+
+		int sval = a;
+		printf( "%d %d / %d %d (%d %d)\n", sval, b, (int)(sin(omega)*1073741824), (int)(cos(omega)*1073741824), (int)(sval-sin(omega)*1073741824), (int)(b-cos(omega)*1073741824) );
+		b = b - emarkadjust;
+		a = a + (((int64_t)b*d)>>32);
+
+#endif
+		printf( "%d,%d,%d\n", a, b, dsq );
+		int32_t badjust = (a * (int64_t)dsq)>>32;
+		a = a + ((dsq * (int64_t)b)>>31);
+		b = b - badjust;
+		printf( "%d,%d\n", a, b );
+		b = b - badjust;
+#endif
+		omega += deltaomega;
 	}
 }
 

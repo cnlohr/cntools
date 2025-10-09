@@ -6,6 +6,9 @@ test_fft : test_fft.c
 testphasor : testphasor.c
 	gcc -o $@ $^ -lm
 
+genrotations : genrotations.c
+	gcc -o  $@ $^ -lm
+
 sinetablegen : sinetablegen.c
 	gcc -o $@ $^ -lm
 
