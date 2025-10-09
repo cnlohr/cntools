@@ -4,7 +4,7 @@ test_fft : test_fft.c
 	gcc -o $@ $^ -lm
 
 testphasor : testphasor.c
-	gcc -o $@ $^ -lm
+	gcc -O3 -g -o $@ $^ -lm
 
 genrotations : genrotations.c
 	gcc -o  $@ $^ -lm

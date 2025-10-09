@@ -11,59 +11,133 @@ int main()
 	int rstop = 8192;
 	double deltaomega = 3.1415926535*2.0/rstop;
 
-	int32_t d = ((1ULL<<31)-1) * (deltaomega);
-	int32_t dsq = ((1ULL<<31)-1) * (deltaomega*deltaomega);
-
-	int32_t a = (1ULL<<30)-1;
-	int32_t b = 0;
-
 	// for rstop=32
 	//dsq = dsq-265650;
 	//b = b + 20623729;
 	//a = a - 20605845;
 
-	dsq = dsq+1;
-	b = b + 315;
-	a = a - 315;
+	int dsqadj = 0;
+	int aaadj = 0;
+	int baadj = 0;
+	int bmuxadj = -1<<30;
 
-	double omega = 0;
-//	float amptune = 2*cos(deltaomega);
+	int bestdsqadj = 0;
+	int bestaaadj = 0;
+	int bestbaadj = 0;
+	int bestbmuxadj = -1<<30;
 
-	// Similar to // https://amycoders.org/tutorials/sintables.html  (The Harmonical Oscilator Approach)
-	for( i = 0; i <= rstop; i++ )
+	int bestseldsqadj = 0;
+	int bestselaaadj = 0;
+	int bestselbaadj = 0;
+	int bestselbmuxadj = -1<<30;
+
+	int usedsq = 0;
+	int usea = 0;
+	int useb = 0;
+	int usemux = 0;
+
+	int iter = 0;
+	for( iter = 0; iter < 100000; iter++ )
 	{
+		bestdsqadj = bestseldsqadj;
+		bestaaadj = bestselaaadj;
+		bestbaadj = bestselbaadj;
+		bestbmuxadj = bestselbmuxadj;
 
-		// a' = a + b
-		// b = b - d^2a'
+		double besterrorma = 1e30;
 
-		a = a + b;
-		int32_t aadj = (((a * (int64_t)dsq)>>32));
-		b = b - aadj;
+		double bvalakN = 0;
+		double bvalakD = 0;
 
-		int32_t bval = ((int64_t)b * -86593307)>>16;
-		printf( "%d %d / targ (%d %d) err (%d %d)\n", a, bval, (int)(cos(omega)*1073741824), (int)(sin(omega)*1073741824), (int)(a-cos(omega)*1073741824), (int)(bval-sin(omega)*1073741824) );
-		b = b - aadj;
+		int v0, v1, v2, v3;
+		for( v0 = -10; v0 <= 10; v0++ )
+		for( v1 = -10; v1 <= 10; v1++ )
+		for( v2 = -10; v2 <= 10; v2++ )
+		for( v3 = -3; v3 <= 4; v3++ )
+		{
+			double errorma = 0.0;
 
-#if 0
-#if 0
-		int emarkadjust = (((int64_t)a*d)>>32)>>1;
-		b = b - emarkadjust;
+			dsqadj = v0 + bestdsqadj;
+			aaadj = v1 + bestaaadj;
+			baadj = v2 + bestbaadj;
+			bmuxadj = v3 + bestbmuxadj;
 
-		int sval = a;
-		printf( "%d %d / %d %d (%d %d)\n", sval, b, (int)(sin(omega)*1073741824), (int)(cos(omega)*1073741824), (int)(sval-sin(omega)*1073741824), (int)(b-cos(omega)*1073741824) );
-		b = b - emarkadjust;
-		a = a + (((int64_t)b*d)>>32);
+			if( v3 == 4 )
+			{
+				//printf( "N/D %f %f\n", bvalakN, bvalakD );
+				// Potentially jump to the answer.
+				bmuxadj = bvalakN/bvalakD*65536;
+				//printf( "MUXVAL %d\n", bmuxadj );
+			}
 
-#endif
-		printf( "%d,%d,%d\n", a, b, dsq );
-		int32_t badjust = (a * (int64_t)dsq)>>32;
-		a = a + ((dsq * (int64_t)b)>>31);
-		b = b - badjust;
-		printf( "%d,%d\n", a, b );
-		b = b - badjust;
-#endif
-		omega += deltaomega;
+			int32_t d = ((1ULL<<31)-1) * (deltaomega);
+			int32_t dsq = ((1ULL<<31)-1) * (deltaomega*deltaomega);
+
+			int32_t a = (1ULL<<30)-1;
+			int32_t b = 0;
+
+			dsq = dsq+dsqadj;
+			b = b + baadj;
+			a = a - aaadj;
+
+			int32_t astart = a;
+			int32_t bstart = b;
+			int32_t mux = bmuxadj;
+			double omega = 0;
+
+		//	printf( "mm %d\n", mux );
+		//	float amptune = 2*cos(deltaomega);
+
+			bvalakN = 0;
+			bvalakD = 0;
+
+			// Similar to // https://amycoders.org/tutorials/sintables.html  (The Harmonical Oscilator Approach)
+			for( i = 0; i <= rstop; i++ )
+			{
+				// a' = a + b
+				// b = b - d^2a'
+
+				a = a + b;
+				int32_t aadj = (((a * (int64_t)dsq)>>32));
+				b = b - aadj;
+
+				int32_t bval = ((int64_t)b * (mux))>>16;
+				if( i == 50 ) printf( "%d %d / targ (%d %d) err (%d %d) %d\n", a, bval, (int)(cos(omega)*1073741824), (int)(sin(omega)*1073741824), (int)(a-cos(omega)*1073741824), (int)(bval-sin(omega)*1073741824), v3 );
+
+				if( b > 500 || b < -500 )
+				{
+					bvalakN += ((sin(omega)*1073741824) / (b));
+					bvalakD++;
+				}
+
+				errorma = sqrt((a-cos(omega)*1073741824) * (a-cos(omega)*1073741824) + (bval-sin(omega)*1073741824) * (bval-sin(omega)*1073741824));
+				b = b - aadj;
+
+				omega += deltaomega;
+			}
+
+		//	printf( "N/D %f\n", bvalakN/bvalakD);
+
+			if( errorma < besterrorma )
+			{
+				usedsq = dsq;
+				usea = astart;
+				useb = bstart;
+				usemux = mux;
+
+
+				besterrorma = errorma;
+				bestseldsqadj = dsqadj;
+				bestselaaadj = aaadj;
+				bestselbaadj = baadj;
+				bestselbmuxadj = bmuxadj;
+				//printf( "%4d %4d %4d %4d  %f\n", bestseldsqadj, bestselaaadj, bestselbaadj, bestselbmuxadj, besterrorma );
+			}
+		}
+
+		printf( "%d %d %d %d %f\n", usedsq, usea, useb, usemux, besterrorma );
 	}
+
 }
 
 
