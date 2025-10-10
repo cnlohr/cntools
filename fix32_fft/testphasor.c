@@ -84,13 +84,13 @@ int main()
 
 			int32_t d = ((1ULL<<31)-1) * (deltaomega);
 			int32_t dsq = ((1ULL<<31)-1) * (deltaomega*deltaomega);
-
+//printf( "%f\n", deltaomega );
 			int32_t a = (1ULL<<30)-1;
 			int32_t b = 0;
 
 			dsq = dsq+dsqadj;
-			b = b + baadj;
-			a = a - aaadj;
+		//	b = b + baadj;
+		//	a = a - aaadj;
 
 			int32_t astart = a;
 			int32_t bstart = b;
@@ -124,8 +124,8 @@ int main()
 				double targsin = sin(omega)*1073741824;
 				double targcos = cos(omega)*1073741824;
 				errorma += sqrt((a-targcos) * (a-targcos) + (bval-targsin) * (bval-targsin));
-				if( ( i == 8000 && v0 == 0 && v1 == 0 && v2 == 0 ) || ( bestset == 4 ) || ( iter == 0 )) printf( "%d %10d %10d / targ (%10d %10d) err (%8d %10d) MUX:%10d EM:%f/%f\n",
-					i, a, bval, (int)(targcos), (int)(targsin), (int)(a-targcos), (int)(bval-targsin), mux, errorma, besterrorma );
+				if( ( i == 8000 && v0 == 0 && v1 == 0 && v2 == 0 ) || ( bestset == 4 ) || ( iter == 0 )) printf( "%d %10d %10d %10d / targ (%10d %10d) err (%8d %10d) MUX:%10d EM:%f/%f\n",
+					i, a, b, bval, (int)(targcos), (int)(targsin), (int)(a-targcos), (int)(bval-targsin), mux, errorma, besterrorma );
 
 				b = b - aadj;
 
