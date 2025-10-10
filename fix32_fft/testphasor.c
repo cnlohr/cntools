@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <math.h>
-
+#include <stdlib.h>
 
 
 int main()
@@ -36,24 +36,28 @@ int main()
 	int useb = 0;
 	int usemux = 0;
 
+	// reset every time new best, used to see if we've finished optimizing.
+	int bestset = 0;
+
+	double besterrorma = 1e30;
+
 	int iter = 0;
-	for( iter = 0; iter < 100000; iter++ )
+	for( iter = 0; iter < 100000 && bestset < 5; iter++, bestset++ )
 	{
 		bestdsqadj = bestseldsqadj;
 		bestaaadj = bestselaaadj;
 		bestbaadj = bestselbaadj;
 		bestbmuxadj = bestselbmuxadj;
 
-		double besterrorma = 1e30;
 
 		double bvalakN = 0;
 		double bvalakD = 0;
 
 		int v0, v1, v2, v3;
-		for( v0 = -10; v0 <= 10; v0++ )
-		for( v1 = -10; v1 <= 10; v1++ )
-		for( v2 = -10; v2 <= 10; v2++ )
-		for( v3 = -3; v3 <= 4; v3++ )
+		for( v0 = -4; v0 <= 4; v0++ )
+		for( v1 = -4; v1 <= 4; v1++ )
+		for( v2 = -4; v2 <= 4; v2++ )
+		for( v3 = -4; v3 <= 4; v3++ )
 		{
 			double errorma = 0.0;
 
@@ -62,13 +66,21 @@ int main()
 			baadj = v2 + bestbaadj;
 			bmuxadj = v3 + bestbmuxadj;
 
-			if( v3 == 4 )
+
+			switch (v0) { case -4: dsqadj += -rand()%100000000; break; case -3: dsqadj += -rand()%100000; break; case -2: dsqadj += -rand()%1000; break; case 4: dsqadj += rand()%100000000; break; case 3: dsqadj += -rand()%100000; break; case 2: dsqadj += rand()%1000; break; }
+			switch (v1) { case -4: aaadj  += -rand()%100000000; break; case -3: aaadj  += -rand()%100000; break; case -2: aaadj  += -rand()%1000; break; case 4: aaadj  += rand()%100000000; break; case 3: aaadj  += -rand()%100000; break; case 2: aaadj  += rand()%1000; break; }
+			switch (v2) { case -4: baadj  += -rand()%100000000; break; case -3: baadj  += -rand()%100000; break; case -2: baadj  += -rand()%1000; break; case 4: baadj  += rand()%100000000; break; case 3: baadj  += -rand()%100000; break; case 2: baadj  += rand()%1000; break; }
+			switch (v3) { case -4: bmuxadj += -rand()%100000000; break; case -3: bmuxadj += -rand()%100000; break; case -2: bmuxadj += -rand()%1000; break; case 4: bmuxadj += rand()%100000000; break; case 3: bmuxadj += -rand()%100000; break; case 2: bmuxadj += rand()%1000; break; }
+#if 0
+			if( v3 == 3 )
 			{
 				//printf( "N/D %f %f\n", bvalakN, bvalakD );
 				// Potentially jump to the answer.
-				bmuxadj = bvalakN/bvalakD*65536;
+				//bmuxadj = bvalakN/bvalakD*65536;
 				//printf( "MUXVAL %d\n", bmuxadj );
+				bmuxadj += rand()%100000;
 			}
+#endif
 
 			int32_t d = ((1ULL<<31)-1) * (deltaomega);
 			int32_t dsq = ((1ULL<<31)-1) * (deltaomega*deltaomega);
@@ -98,11 +110,10 @@ int main()
 				// b = b - d^2a'
 
 				a = a + b;
-				int32_t aadj = (((a * (int64_t)dsq)>>32));
+				int32_t aadj = (((a * (int64_t)dsq)>>32))<<1;
 				b = b - aadj;
 
 				int32_t bval = ((int64_t)b * (mux))>>16;
-				if( i == 50 ) printf( "%d %d / targ (%d %d) err (%d %d) %d\n", a, bval, (int)(cos(omega)*1073741824), (int)(sin(omega)*1073741824), (int)(a-cos(omega)*1073741824), (int)(bval-sin(omega)*1073741824), v3 );
 
 				if( b > 500 || b < -500 )
 				{
@@ -110,7 +121,12 @@ int main()
 					bvalakD++;
 				}
 
-				errorma = sqrt((a-cos(omega)*1073741824) * (a-cos(omega)*1073741824) + (bval-sin(omega)*1073741824) * (bval-sin(omega)*1073741824));
+				double targsin = sin(omega)*1073741824;
+				double targcos = cos(omega)*1073741824;
+				errorma += sqrt((a-targcos) * (a-targcos) + (bval-targsin) * (bval-targsin));
+				if( ( i == 8000 && v0 == 0 && v1 == 0 && v2 == 0 ) || ( bestset == 4 ) || ( iter == 0 )) printf( "%d %10d %10d / targ (%10d %10d) err (%8d %10d) MUX:%10d EM:%f/%f\n",
+					i, a, bval, (int)(targcos), (int)(targsin), (int)(a-targcos), (int)(bval-targsin), mux, errorma, besterrorma );
+
 				b = b - aadj;
 
 				omega += deltaomega;
@@ -131,7 +147,10 @@ int main()
 				bestselaaadj = aaadj;
 				bestselbaadj = baadj;
 				bestselbmuxadj = bmuxadj;
-				//printf( "%4d %4d %4d %4d  %f\n", bestseldsqadj, bestselaaadj, bestselbaadj, bestselbmuxadj, besterrorma );
+
+
+				printf( "New Best: %4d %4d %4d %4d  %f\n", bestseldsqadj, bestselaaadj, bestselbaadj, bestselbmuxadj, besterrorma );
+				bestset = 0;
 			}
 		}
 
