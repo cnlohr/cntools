@@ -19,22 +19,22 @@ int main()
 	int dsqadj = 0;
 	int aaadj = 0;
 	int baadj = 0;
-	int bmuxadj = -1<<30;
+	int bmuxadj = -1<<10;
 
 	int bestdsqadj = 0;
 	int bestaaadj = 0;
 	int bestbaadj = 0;
-	int bestbmuxadj = -1<<30;
+	int bestbmuxadj = -1<<10;
 
 	int bestseldsqadj = 0;
 	int bestselaaadj = 0;
 	int bestselbaadj = 0;
-	int bestselbmuxadj = -1<<30;
+	int bestselbmuxadj = -1<<10;
 
 	int usedsq = 0;
 	int usea = 0;
 	int useb = 0;
-	int usemux = 0;
+	int usemux = 1000;
 
 	// reset every time new best, used to see if we've finished optimizing.
 	int bestset = 0;
@@ -57,7 +57,9 @@ int main()
 		for( v0 = -4; v0 <= 4; v0++ )
 		for( v1 = -4; v1 <= 4; v1++ )
 		for( v2 = -4; v2 <= 4; v2++ )
+#ifdef METHOD0
 		for( v3 = -4; v3 <= 4; v3++ )
+#endif
 		{
 			double errorma = 0.0;
 
@@ -66,12 +68,18 @@ int main()
 			baadj = v2 + bestbaadj;
 			bmuxadj = v3 + bestbmuxadj;
 
-
+#if 1
 			switch (v0) { case -4: dsqadj += -rand()%100000000; break; case -3: dsqadj += -rand()%100000; break; case -2: dsqadj += -rand()%1000; break; case 4: dsqadj += rand()%100000000; break; case 3: dsqadj += -rand()%100000; break; case 2: dsqadj += rand()%1000; break; }
 			switch (v1) { case -4: aaadj  += -rand()%100000000; break; case -3: aaadj  += -rand()%100000; break; case -2: aaadj  += -rand()%1000; break; case 4: aaadj  += rand()%100000000; break; case 3: aaadj  += -rand()%100000; break; case 2: aaadj  += rand()%1000; break; }
 			switch (v2) { case -4: baadj  += -rand()%100000000; break; case -3: baadj  += -rand()%100000; break; case -2: baadj  += -rand()%1000; break; case 4: baadj  += rand()%100000000; break; case 3: baadj  += -rand()%100000; break; case 2: baadj  += rand()%1000; break; }
+#ifdef METHOD0
 			switch (v3) { case -4: bmuxadj += -rand()%100000000; break; case -3: bmuxadj += -rand()%100000; break; case -2: bmuxadj += -rand()%1000; break; case 4: bmuxadj += rand()%100000000; break; case 3: bmuxadj += -rand()%100000; break; case 2: bmuxadj += rand()%1000; break; }
+#endif
+
+#endif
+
 #if 0
+			// this doesn't work.
 			if( v3 == 3 )
 			{
 				//printf( "N/D %f %f\n", bvalakN, bvalakD );
@@ -84,18 +92,28 @@ int main()
 
 			int32_t d = ((1ULL<<31)-1) * (deltaomega);
 			int32_t dsq = ((1ULL<<31)-1) * (deltaomega*deltaomega);
+
+#define METHOD1 1
+
+#ifdef METHOD0
+#else
+			dsq = d;
+#endif
+
 //printf( "%f\n", deltaomega );
 			int32_t a = (1ULL<<30)-1;
 			int32_t b = 0;
 
 			dsq = dsq+dsqadj;
-		//	b = b + baadj;
-		//	a = a - aaadj;
+			b = b + baadj;
+			a = a + aaadj;
 
 			int32_t astart = a;
 			int32_t bstart = b;
 			int32_t mux = bmuxadj;
 			double omega = 0;
+
+		//	printf( "Test: %d %d %d %d\n", dsq, astart, bstart, mux );
 
 		//	printf( "mm %d\n", mux );
 		//	float amptune = 2*cos(deltaomega);
@@ -109,11 +127,21 @@ int main()
 				// a' = a + b
 				// b = b - d^2a'
 
+#define METHOD1 1
+
+#ifdef METHOD0
 				a = a + b;
 				int32_t aadj = (((a * (int64_t)dsq)>>32))<<1;
 				b = b - aadj;
-
 				int32_t bval = ((int64_t)b * (mux))>>16;
+
+#else
+
+				a = a + (((b*(int64_t)dsq)>>32)<<1);
+				b = b - (((a*(int64_t)dsq)>>32)<<1);
+
+				int32_t bval = b;
+#endif
 
 				if( b > 500 || b < -500 )
 				{
@@ -124,10 +152,15 @@ int main()
 				double targsin = sin(omega)*1073741824;
 				double targcos = cos(omega)*1073741824;
 				errorma += sqrt((a-targcos) * (a-targcos) + (bval-targsin) * (bval-targsin));
-				if( ( i == 8000 && v0 == 0 && v1 == 0 && v2 == 0 ) || ( bestset == 4 ) || ( iter == 0 )) printf( "%d %10d %10d %10d / targ (%10d %10d) err (%8d %10d) MUX:%10d EM:%f/%f\n",
+				if( ( (
+						i == 8000 ||
+						iter == 0 ||
+						bestset == 4 )  && v0 == 0 && v1 == 0 && v2 == 0 && v3 == 0 ) ) printf( "V %d %10d %10d %10d / targ (%10d %10d) err (%8d %10d) MUX:%10d EM:%f/%f\n",
 					i, a, b, bval, (int)(targcos), (int)(targsin), (int)(a-targcos), (int)(bval-targsin), mux, errorma, besterrorma );
 
+#ifdef METHOD0
 				b = b - aadj;
+#endif
 
 				omega += deltaomega;
 			}
