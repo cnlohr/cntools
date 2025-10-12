@@ -8,7 +8,7 @@
 
 #include "fix32_fft.h"
 
-#define M 16
+#define M 12
 
 uint64_t deviation( int a, int b )
 {
@@ -94,29 +94,36 @@ int main()
 
 	for( i = 0; i < (1<<M); i++ )
 	{
-		real[i] = (rand()%1001)-500;
-		imag[i] = (rand()%1001)-500;
+		real[i] = 
+			sin( i ) * ((1LL<<8)-1);
+			//(rand()%1001)-500;
+		imag[i] = 
+			cos( i ) * ((1LL<<8)-1);
+			//(rand()%1001)-500;
 	}
 
 	srand(2);
 
-	int offset = 1000;
+	int offset = 500;
 
-	for( i = 0; i < 1024; i++ )
+	for( i = 0; i < 512; i++ )
 	{
-		int rv = convmapreal[i+100] = (rand()%1001)-500;
-		int iv = convmapimag[i+100] = (rand()%1001)-500;
+		int rv = convmapreal[i] = (rand()%1001)-500;
+		int iv = convmapimag[i] = (rand()%1001)-500;
 
 		// Mix new random signal in.
-		real[i+offset] = rv;
-		imag[i+offset] = iv;
+		real[i+offset] += rv;
+		imag[i+offset] += iv;
 	}
 
 	if( fix32_fft( real, imag, M, 0 ) ) goto fail;
 	if( fix32_fft( convmapreal, convmapimag, M, 0 ) ) goto fail;
 
+	FILE * fint = fopen ("intermediate.csv","w");
+
 	for( i = 0; i < (1<<M); i++ )
 	{
+		fprintf( fint, "%d, %d\n", real[i], imag[i] );
 		int32_t t = ((real[i] * convmapreal[i])>>31) + ((imag[i] * convmapimag[i])>>31);
 		imag[i]   =-((real[i] * convmapimag[i])>>31) + ((imag[i] * convmapreal[i])>>31);
 		real[i] = t;
@@ -127,7 +134,7 @@ int main()
 	FILE * fcomp = fopen ("fcomp.csv","w");
 	for( i = 0; i < (1<<M); i++ )
 	{
-		fprintf( fcomp, "%d, %d\n", i, real[i]*real[i] + imag[i]*imag[i] );
+		fprintf( fcomp, "%d, %d, %d, %d\n", i, real[i], imag[i], real[i]*real[i] + imag[i]*imag[i] );
 	}
 	fclose( fcomp );
 
