@@ -4,54 +4,132 @@
 #include <math.h>
 
 #define FIX32_FFT_IMPLEMENTATION
-//#define FIX32_FFT_PRECISEROUNDING
+#define FIX32_FFT_PRECISEROUNDING 1
 
 #include "fix32_fft.h"
 
-#define M 12
+#define M 16
 
 uint64_t deviation( int a, int b )
 {
-	int diff = a - b;
-	if( diff < 0 )
-		return -diff;
-	else
-		return diff;
+	return (a-b)*(a-b);
 }
+
+int32_t real[1<<M] = { 0 };
+int32_t imag[1<<M] = { 0 };
+int32_t convmapreal[1<<M] = { 0 };
+int32_t convmapimag[1<<M] = { 0 };
 
 int main()
 {
-	int32_t real[1<<M] = { 0 };
-	int32_t imag[1<<M] = { 0 };
+	// Steps are:
+	// 1. Perform a forward and reverse complex FFT.
+	// 2. Perform a forward and reverse real FFT.
+	// 3. Perform a correlation (the mirror of a convolution)
+
 
 	int i;
 
 	srand(1);
-	for( i = 0; i < 4096; i++ )
+	for( i = 0; i < (1<<M); i++ )
 	{
-		real[i] = sin( i ) * ((1LL<<25)-1); //(rand()%10001)-5000;
-		imag[i] = cos( i ) * ((1LL<<25)-1); //(rand()%10001)-5000;
+		real[i] = 
+//			sin( i ) * ((1LL<<10)-1);
+			(rand()%10001)-5000;
+		imag[i] = 
+//			cos( i ) * ((1LL<<10)-1);
+			(rand()%10001)-5000;
 	}
 
 	if( fix32_fft( real, imag, M, 0 ) ) goto fail;
-//	fix32_shift( real, imag, M, 6 );
+//	fix32_shift( real, imag, M, -M/2 );
 	if( fix32_fft( real, imag, M, 1 ) ) goto fail;
-//	fix32_shift( real, imag, M, -12 );
+//	fix32_shift( real, imag, M, -M/2 );
 
 	srand(1);
 
 	uint64_t total_deviation = 0;
-	for( i = 0; i < 4096; i++ )
+	for( i = 0; i < (1<<M); i++ )
 	{
-		int rcheck = sin( i ) * ((1LL<<25)-1); //(rand()%10001)-5000;
-		int icheck = cos( i ) * ((1LL<<25)-1); //(rand()%10001)-5000;
-		//if( i < 50 ) printf( "%d  %d\n", rcheck, real[i] );
+		int rcheck = 
+			// sin( i ) * ((1LL<<10)-1);
+			(rand()%10001)-5000;
+		int icheck =
+			//cos( i ) * ((1LL<<10)-1);
+			(rand()%10001)-5000;
+		//if( i < 50 )
+		//	printf( "%d  %d\n", rcheck, real[i] );
 		total_deviation +=
 			deviation( real[i], rcheck ) +
 			deviation( imag[i], icheck );
 	}
 
-	printf( "Deviation: %lu\n", total_deviation );
+	printf( "Complex FFT Average Error Squared Per Sample: %f\n", total_deviation/(double)(1<<M) );
+
+	srand(1);
+
+	for( i = 0; i < (1<<M); i++ )
+	{
+		real[i] = sin( i ) * ((1LL<<10)-1); //(rand()%10001)-5000;
+	}
+
+	if( fix32_fftr( real, M, 0 ) ) goto fail;
+	if( fix32_fftr( real, M, 1 ) ) goto fail;
+	fix32_shift( real, imag, M, -1 );
+
+	srand(1);
+
+	total_deviation = 0;
+	for( i = 0; i < (1<<M); i++ )
+	{
+		int rcheck = sin( i ) * ((1LL<<10)-1); //(rand()%10001)-5000;
+		//if( i < 50 )
+		//printf( "%d  %d\n", rcheck, real[i] );
+		total_deviation += deviation( real[i], rcheck );
+	}
+
+	printf( "Real FFT Average Error Squared Per Sample: %f\n", total_deviation/(double)(1<<M) );
+
+	srand(1);
+
+	for( i = 0; i < (1<<M); i++ )
+	{
+		real[i] = (rand()%1001)-500;
+		imag[i] = (rand()%1001)-500;
+	}
+
+	srand(2);
+
+	int offset = 1000;
+
+	for( i = 0; i < 1024; i++ )
+	{
+		int rv = convmapreal[i+100] = (rand()%1001)-500;
+		int iv = convmapimag[i+100] = (rand()%1001)-500;
+
+		// Mix new random signal in.
+		real[i+offset] = rv;
+		imag[i+offset] = iv;
+	}
+
+	if( fix32_fft( real, imag, M, 0 ) ) goto fail;
+	if( fix32_fft( convmapreal, convmapimag, M, 0 ) ) goto fail;
+
+	for( i = 0; i < (1<<M); i++ )
+	{
+		int32_t t = ((real[i] * convmapreal[i])>>31) + ((imag[i] * convmapimag[i])>>31);
+		imag[i]   =-((real[i] * convmapimag[i])>>31) + ((imag[i] * convmapreal[i])>>31);
+		real[i] = t;
+	}
+
+	if( fix32_fft( real, imag, M, 1 ) ) goto fail;
+
+	FILE * fcomp = fopen ("fcomp.csv","w");
+	for( i = 0; i < (1<<M); i++ )
+	{
+		fprintf( fcomp, "%d, %d\n", i, real[i]*real[i] + imag[i]*imag[i] );
+	}
+	fclose( fcomp );
 
 	return 0;
 fail:

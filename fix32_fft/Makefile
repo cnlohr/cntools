@@ -1,17 +1,11 @@
 all : test_fft
 
 test_fft : test_fft.c
-	gcc -o $@ $^ -lm
-
-testphasor : testphasor.c
-	gcc -O3 -g -o $@ $^ -lm
+	gcc -O2 -g -o $@ $^ -lm -Wall
 
 genrotations : genrotations.c
-	gcc -o  $@ $^ -lm
-
-sinetablegen : sinetablegen.c
-	gcc -o $@ $^ -lm
+	gcc -O3 -o  $@ $^ -lm
 
 clean :
-	rm -rf test_fft testphasor sinetablegen
+	rm -rf test_fft genrotations
 

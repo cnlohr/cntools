@@ -1,3 +1,5 @@
+// Playing with phasors. This is unfortunately too unstable for general use.
+
 #include <stdint.h>
 #include <stdio.h>
 #include <math.h>
@@ -100,7 +102,6 @@ int main()
 			dsq = d;
 #endif
 
-//printf( "%f\n", deltaomega );
 			int32_t a = (1ULL<<30)-1;
 			int32_t b = 0;
 
@@ -112,11 +113,6 @@ int main()
 			int32_t bstart = b;
 			int32_t mux = bmuxadj;
 			double omega = 0;
-
-		//	printf( "Test: %d %d %d %d\n", dsq, astart, bstart, mux );
-
-		//	printf( "mm %d\n", mux );
-		//	float amptune = 2*cos(deltaomega);
 
 			bvalakN = 0;
 			bvalakD = 0;
@@ -155,8 +151,10 @@ int main()
 				if( ( (
 						i == 8000 ||
 						iter == 0 ||
-						bestset == 4 )  && v0 == 0 && v1 == 0 && v2 == 0 && v3 == 0 ) ) printf( "V %d %10d %10d %10d / targ (%10d %10d) err (%8d %10d) MUX:%10d EM:%f/%f\n",
-					i, a, b, bval, (int)(targcos), (int)(targsin), (int)(a-targcos), (int)(bval-targsin), mux, errorma, besterrorma );
+						bestset == 4 )  && v0 == 0 && v1 == 0 && v2 == 0 && v3 == 0 ) )
+
+						printf( "V %d %10d %10d %10d / targ (%10d %10d) err (%8d %10d) MUX:%10d EM:%f/%f (OM:%f)\n",
+						i, a, b, bval, (int)(targcos), (int)(targsin), (int)(a-targcos), (int)(bval-targsin), mux, errorma, besterrorma, omega );
 
 #ifdef METHOD0
 				b = b - aadj;
