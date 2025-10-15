@@ -9,6 +9,13 @@
 #include <stdlib.h>
 
 
+#define SINESIZEL2 12
+#define SINESIZE (1<<SINESIZEL2)
+#define SINEMASK (SINESIZE-1)
+#define LOG2_N_WAVE 24
+#define N_WAVE (1<<LOG2_N_WAVE)
+
+
 int precise = 0;
 
 int32_t MUL_MPYU( int32_t a, uint32_t b )
@@ -60,12 +67,6 @@ int main()
 	int i;
 
 	int adjx, adjy;
-
-	#define SINESIZEL2 7
-	#define SINESIZE (1<<SINESIZEL2)
-	#define SINEMASK (SINESIZE-1)
-	#define LOG2_N_WAVE 24
-	#define N_WAVE (1<<LOG2_N_WAVE)
 
 	FILE * fOut = fopen( "luts.txt", "w" );
 	int32_t sinetable_base[SINESIZE + SINESIZE/4];

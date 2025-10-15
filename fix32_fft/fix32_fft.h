@@ -12,7 +12,7 @@
 
   My rewrite is:
   
-  Copyright (c) 2025 cnlohr 
+  Copyright (c) 2025 cnlohr
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to
@@ -117,6 +117,9 @@ void fix32_shift( int32_t * fr, int32_t * fi, int m, int shift );
 // Larger numbers will make the sine table bigger, and thus make it more
 // precise.  But also, there are performance tradeoffs, for instance if memory
 // accesses are slow, then you are better off making your table smaller.
+//
+// In general past sizel2 = 7, you get **massively** diminishing results where
+// using a much larger table will sometimes have bit-for-bit identical outputs
 
 #define SINESIZEL2 7
 #define SINESIZE (1<<SINESIZEL2)
@@ -323,16 +326,16 @@ int fix32_fft( int32_t fr[], int32_t fi[], int M, int inverse )
 					int32_t tmpr = fr[j];
 					int32_t tmpi = fi[j];
 
-					int32_t tr = FIX_MPY(wr,tmpr) - FIX_MPY(wi,tmpi);
-					int32_t ti = FIX_MPY(wr,tmpi) + FIX_MPY(wi,tmpr);
-
-#if FIX32_FFT_PRECISEROUNDING
-					tr >>= 1;
-					ti >>= 1;
-#endif
+					int32_t zr = FIX_MPY(wr,tmpr) - FIX_MPY(wi,tmpi);
+					int32_t zi = FIX_MPY(wr,tmpi) + FIX_MPY(wi,tmpr);
 
 					int32_t qr = fr[i];
 					int32_t qi = fi[i];
+
+#if FIX32_FFT_PRECISEROUNDING
+					zr >>= 1;
+					zi >>= 1;
+#endif
 
 					// If we aren't doing precise rounding, shift back up
 					// here. You cannot just shift one or the other here.
@@ -340,10 +343,10 @@ int fix32_fft( int32_t fr[], int32_t fi[], int M, int inverse )
 					qr >>= 1;
 					qi >>= 1;
 
-					fr[j] = qr - tr;
-					fi[j] = qi - ti;
-					fr[i] = qr + tr;
-					fi[i] = qi + ti;
+					fr[j] = qr - zr;
+					fi[j] = qi - zi;
+					fr[i] = qr + zr;
+					fi[i] = qi + zi;
 				}
 			}
 			else
@@ -358,22 +361,22 @@ int fix32_fft( int32_t fr[], int32_t fi[], int M, int inverse )
 
 					// 4x load -> 4x mulh + 2x add/sub -> 2x shifts ->
 					// 4x add/sub -> 4x store
-					int32_t tr = FIX_MPY(wr,tmpr) - FIX_MPY(wi,tmpi);
-					int32_t ti = FIX_MPY(wr,tmpi) + FIX_MPY(wi,tmpr);
-
-					// Here's where the top/bottom loop depart.
-#if FIX32_FFT_PRECISEROUNDING == 0
-					tr <<= 1;
-					ti <<= 1;
-#endif
+					int32_t zr = FIX_MPY(wr,tmpr) - FIX_MPY(wi,tmpi);
+					int32_t zi = FIX_MPY(wr,tmpi) + FIX_MPY(wi,tmpr);
 
 					int32_t qr = fr[i];
 					int32_t qi = fi[i];
 
-					fr[j] = qr - tr;
-					fi[j] = qi - ti;
-					fr[i] = qr + tr;
-					fi[i] = qi + ti;
+					// Here's where the top/bottom loop depart.
+#if FIX32_FFT_PRECISEROUNDING == 0
+					zr <<= 1;
+					zi <<= 1;
+#endif
+
+					fr[j] = qr - zr;
+					fi[j] = qi - zi;
+					fr[i] = qr + zr;
+					fi[i] = qi + zi;
 				}
 			}
 		}
