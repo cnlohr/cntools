@@ -103,25 +103,23 @@ int main()
 	for( i = 0; i < (1<<M); i++ )
 	{
 		real[i] = 
-			sin( i ) * ((1LL<<8)-1);
-			//(rand()%1001)-500;
+			//sin( i ) * ((1LL<<8)-1);
+			(rand()%10000000)-5000000;
 		imag[i] = 
-			cos( i ) * ((1LL<<8)-1);
-			//(rand()%1001)-500;
+			//cos( i ) * ((1LL<<8)-1);
+			(rand()%10000000)-5000000;
 	}
 
-	srand(2);
+	int offset = 800;
 
-	int offset = 500;
-
-	for( i = 0; i < 512; i++ )
+	for( i = 0; i < 1024; i++ )
 	{
-		int rv = convmapreal[i] = (rand()%1001)-500;
-		int iv = convmapimag[i] = (rand()%1001)-500;
+		int rv = convmapreal[i] = (rand()%10000000)-5000000;
+		int iv = convmapimag[i] = (rand()%10000000)-5000000;
 
 		// Mix new random signal in.
-		real[i+offset] += rv;
-		imag[i+offset] += iv;
+		real[offset+i] += rv/8;
+		imag[offset+i] += iv/8;
 	}
 
 	if( fix32_fft( real, imag, M, 0 ) ) goto fail;
@@ -131,10 +129,14 @@ int main()
 
 	for( i = 0; i < (1<<M); i++ )
 	{
-		fprintf( fCheck, "%d, %d\n", real[i], imag[i] );
-		int32_t t = ((real[i] * convmapreal[i])>>31) + ((imag[i] * convmapimag[i])>>31);
-		imag[i]   =-((real[i] * convmapimag[i])>>31) + ((imag[i] * convmapreal[i])>>31);
+		int32_t ri = real[i];
+		int32_t ii = imag[i];
+		int32_t cmrr = convmapreal[i];
+		int32_t cmri = convmapimag[i];
+		int32_t t = ((ri * (int64_t)cmrr)>>36) + ((ii * (int64_t)cmri)>>36);
+		imag[i]   =-((ri * (int64_t)cmri)>>36) + ((ii * (int64_t)cmrr)>>36);
 		real[i] = t;
+		fprintf( fCheck, "%d, %d, %d, %d, %d, %d\n", ri,ii, cmrr, cmri, real[i], imag[i] );
 	}
 
 	fclose( fCheck );
@@ -142,10 +144,18 @@ int main()
 	if( fix32_fft( real, imag, M, 1 ) ) goto fail;
 
 	fCheck = fopen ("test_conv.csv","w");
+	double pwrRMS = 0;
+	double pwrPeak = 0;
 	for( i = 0; i < (1<<M); i++ )
 	{
+		double amp = real[i] * real[i] + imag[i] * imag[i];
 		fprintf( fCheck, "%d, %d, %d, %d\n", i, real[i], imag[i], real[i]*real[i] + imag[i]*imag[i] );
+		pwrRMS += (amp);
+		//pwrRMS +=(amp);
+		if( i == 800 ) pwrPeak = amp;
 	}
+	pwrRMS = pwrRMS/(1<<M);
+	printf( "%f %f\n", pwrRMS, pwrPeak );
 	fclose( fCheck );
 
 	return 0;
