@@ -3,12 +3,15 @@
   geared for embedded, and/or power-reduced 32-bit integer system.
 
   This comes from the fix_fft.c lineage, but is basically a rewrite.  You can
-  see a copy of it here: https://gist.github.com/Tomwi/3842231 
+  see a copy of the original here: https://gist.github.com/Tomwi/3842231 
 
   The original (unlicensed version is)
      Written by:  Tom Roberts  11/8/89
      Made portable:  Malcolm Slaney 12/15/94 malcolm@interval.com
      Enhanced:  Dimitrios P. Bouras  14 Jun 2006 dbouras@ieee.org
+
+  I greatly admired their interface and approach, but I needed it in more bits
+  and I needed it to do much larger FFTs.
 
   My rewrite is:
   
@@ -94,9 +97,6 @@ Options:
      fr[n],fi[n] are real and imaginary arrays, both INPUT AND
      RESULT (in-place FFT), with 0 <= n < 2**m; set inverse to
      0 for forward transform (FFT), or 1 for iFFT.
-
-  I just felt that their interface, and technique was just amazing! So
-  that's why I used it as my base.
 */
 
 #ifndef FIX32_FFT_H
@@ -198,7 +198,6 @@ int fix32_fft( int32_t fr[], int32_t fi[], int M, int inverse )
 
 	// Compute N from _m_
 	int N = 1 << M;
-	int nn = N - 1;
 
 	// Make sure we aren't too big.
 	if( M > LOG2_N_WAVE )
@@ -207,7 +206,7 @@ int fix32_fft( int32_t fr[], int32_t fi[], int M, int inverse )
 	// FFTs want the input data fields to be fractally flipped. This canbe 
 	// cleverly accomplished by computing the flipped locations by flipping
 	// the sequence of bits inside a word. 
-	for ( l = 1; l <= nn; ++l )
+	for ( l = 1; l < N; ++l )
 	{
 #if LOG2_N_WAVE <= 16
 		// Hacker's delight addendum (not in first edition) "rev11a" bit

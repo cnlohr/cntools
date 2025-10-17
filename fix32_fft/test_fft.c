@@ -8,7 +8,7 @@
 
 #include "fix32_fft.h"
 
-#define M 12
+#define M 14
 
 uint64_t deviation( int a, int b )
 {
@@ -104,23 +104,51 @@ int main()
 	{
 		real[i] = 
 			//sin( i ) * ((1LL<<8)-1);
-			(rand()%10000000)-5000000;
+			(rand()%2000000)-1000000;
 		imag[i] = 
 			//cos( i ) * ((1LL<<8)-1);
-			(rand()%10000000)-5000000;
+			(rand()%2000000)-1000000;
 	}
 
-	int offset = 800;
+	int offset = 100;
+	int nmatch = 2048;
 
-	for( i = 0; i < 1024; i++ )
+	// The limit is about... At least I think that's how it works?
+	// Same equation as oversampling, right?
+	//
+	//    -14dB (/5 in voltage) for 128 samples.
+	//    -20dB (/10 in voltage) for 512 samples.
+	//    -26dB (/20 in voltage) for 2048 samples.
+	//    -32dB (/40 in voltage) for 8192 samples (though 16384 seems to be preferred)
+
+	for( i = 0; i < nmatch; i++ )
 	{
-		int rv = convmapreal[i] = (rand()%10000000)-5000000;
-		int iv = convmapimag[i] = (rand()%10000000)-5000000;
+		int rv = convmapreal[i] = (rand()%2000000)-1000000;
+		int iv = convmapimag[i] = (rand()%2000000)-1000000;
 
 		// Mix new random signal in.
-		real[offset+i] += rv/8;
-		imag[offset+i] += iv/8;
+		real[offset+i] += rv/20;
+		imag[offset+i] += iv/20;
 	}
+
+	fCheck = fopen ("test_convC.csv","w");
+
+	for( i = 0; i < (1<<M); i++ )
+	{
+		// i is the offset.
+		double ar = 0;
+		double ai = 0;
+		for( int j = 0; j < nmatch; j++ )
+		{
+			if( j+i > (1<<M) ) continue;
+			ar += real[j+i] * (double)convmapreal[j] + imag[j+i] * (double)convmapimag[j];
+			ai +=-imag[j+i] * (double)convmapreal[j] + real[j+i] * (double)convmapimag[j];
+		}
+		fprintf( fCheck, "%d, %f, %f, %f\n", i, ar/8192.0/8192.0, ai/8192.0/8192.0, sqrt(ar*ar+ai*ai)/8192.0/8192.0 );
+		// You can make sure the convolution works by checking these two against each other.
+	}
+
+	fclose( fCheck );
 
 	if( fix32_fft( real, imag, M, 0 ) ) goto fail;
 	if( fix32_fft( convmapreal, convmapimag, M, 0 ) ) goto fail;
@@ -133,8 +161,10 @@ int main()
 		int32_t ii = imag[i];
 		int32_t cmrr = convmapreal[i];
 		int32_t cmri = convmapimag[i];
-		int32_t t = ((ri * (int64_t)cmrr)>>36) + ((ii * (int64_t)cmri)>>36);
-		imag[i]   =-((ri * (int64_t)cmri)>>36) + ((ii * (int64_t)cmrr)>>36);
+
+		// Performing a conjugate multiply, so it's a correlation not a convolution.
+		int32_t t = ((ri * (int64_t)cmrr)>>24) + ((ii * (int64_t)cmri)>>24);
+		imag[i]   =-((ri * (int64_t)cmri)>>24) + ((ii * (int64_t)cmrr)>>24);
 		real[i] = t;
 		fprintf( fCheck, "%d, %d, %d, %d, %d, %d\n", ri,ii, cmrr, cmri, real[i], imag[i] );
 	}
@@ -148,14 +178,14 @@ int main()
 	double pwrPeak = 0;
 	for( i = 0; i < (1<<M); i++ )
 	{
-		double amp = real[i] * real[i] + imag[i] * imag[i];
-		fprintf( fCheck, "%d, %d, %d, %d\n", i, real[i], imag[i], real[i]*real[i] + imag[i]*imag[i] );
+		double amp = sqrt(real[i] * (double)real[i] + imag[i] * (double)imag[i]);
+		fprintf( fCheck, "%d, %d, %d, %f\n", i, real[i], imag[i], sqrt(real[i]*(double)real[i] + imag[i]*(double)imag[i]) );
 		pwrRMS += (amp);
 		//pwrRMS +=(amp);
-		if( i == 800 ) pwrPeak = amp;
+		if( i == offset ) pwrPeak = amp;
 	}
 	pwrRMS = pwrRMS/(1<<M);
-	printf( "%f %f\n", pwrRMS, pwrPeak );
+	printf( "RMS: %f  Expected Peak: %f / Ratio: %f\n", pwrRMS, pwrPeak, pwrPeak/pwrRMS );
 	fclose( fCheck );
 
 	return 0;
