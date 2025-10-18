@@ -138,34 +138,22 @@ int main()
 		//    -26dB (/20 in voltage) for 2048 samples.
 		//    -32dB (/40 in voltage) for 8192 samples.
 
-		double snr = 1.0/1.0;
+		double snr = 1.0/10.0;
+
+		int offset = 34;
 
 		for( i = 0; i < (1<<M); i++ )
 		{
 			int j = scramble_fwd( ( i )%(1<<M) );
-			int rv = convmapreal[(j+0)%(1<<M)] = ((rand()%2)*2-1)*1000000;
-			int iv = convmapimag[(j+0)%(1<<M)] = ((rand()%2)*2-1)*1000000;
+
+			int rv = convmapreal[(j+ offset )%(1<<M) ] = ((rand()%2)*2-1)*1000000;
+			int iv = convmapimag[(j+ offset )%(1<<M) ] = ((rand()%2)*2-1)*1000000;
+
+			// Mix new random signal in.
+			real[(i+skew)%(1<<M)] += rv*snr;
+			imag[(i+skew)%(1<<M)] += iv*snr;
 		}
 
-		int signo;
-		for( signo = 0; signo < 10; signo++ )
-		{
-
-			int offset = signo*10+4;
-			int deoffset = signo;
-			
-			for( i = 0; i < (1<<M); i++ )
-			{
-				int j = scramble_fwd( ( i )%(1<<M) );
-
-				int rv = convmapreal[(j+offset)%(1<<M) ];
-				int iv = convmapimag[(j+offset)%(1<<M) ];
-
-				// Mix new random signal in.
-				real[(i+skew-deoffset+(1<<M))%(1<<M)] += rv*snr;
-				imag[(i+skew-deoffset+(1<<M))%(1<<M)] += iv*snr;
-			}
-		}
 
 		for( i = 0; i < (1<<M); i++ )
 		{
@@ -209,10 +197,10 @@ int main()
 
 			pwrRMS += (amp);
 			//pwrRMS +=(amp);
-			//if( i == offset ) pwrPeak = amp;
+			if( i == offset ) pwrPeak = amp;
 		}
 		pwrRMS = pwrRMS/(1<<M);
-//		printf( "RMS: %f  Expected Peak: %f / Ratio: %f\n", pwrRMS, pwrPeak, pwrPeak/pwrRMS );
+		printf( "RMS: %f  Expected Peak: %f / Ratio: %f\n", pwrRMS, pwrPeak, pwrPeak/pwrRMS );
 		fprintf( fCheck, "\n" );
 	}
 	fclose( fCheck );
