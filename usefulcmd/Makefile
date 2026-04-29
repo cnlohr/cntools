@@ -1,7 +1,10 @@
-TARGETS:=slowpipe hex2eng scatter2svg chexdump synczcat prependtime
+TARGETS:=slowpipe hex2eng scatter2svg chexdump synczcat prependtime dyngraph
 EXTRAS:=serterm
 
 all : $(TARGETS)
+
+dyngraph : dyngraph.c
+	gcc  -I../rawdraw -o $@ $^ -lX11 -lm
 
 prependtime : prependtime.o
 	gcc -o $@ $^
