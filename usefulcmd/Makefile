@@ -1,10 +1,13 @@
-TARGETS:=slowpipe hex2eng scatter2svg chexdump synczcat prependtime dyngraph
+TARGETS:=slowpipe hex2eng scatter2svg chexdump synczcat prependtime dyngraph latencytest
 EXTRAS:=serterm
 
 all : $(TARGETS)
 
 dyngraph : dyngraph.c
 	gcc  -I../rawdraw -o $@ $^ -lX11 -lm
+
+latencytest : latencytest.c
+	gcc -o $@ $^ -lpthread -O3 -s
 
 prependtime : prependtime.o
 	gcc -o $@ $^
