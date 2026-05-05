@@ -174,6 +174,10 @@ int main( int argc, char ** argv )
 	double lastLine = bindiv;
 	for( i = 0; i < HIST_MAX; i++ )
 	{
+		accum_timer += timerLatencyHistogram[i];
+		accum_sleep += sleepLatencyHistogram[i];
+		accum_unlock += unlockLatencyHistogram[i];
+		accum_pipe += pipeLatencyHistogram[i];
 		if( i >= lastLine || i == HIST_MAX-1 )
 		{
 			printf( "%d, %d, %d, %d, %d\n", i, accum_timer, accum_sleep, accum_unlock, accum_pipe );
@@ -183,10 +187,6 @@ int main( int argc, char ** argv )
 			accum_unlock = 0;
 			accum_pipe = 0;
 		}
-		accum_timer += timerLatencyHistogram[i];
-		accum_sleep += sleepLatencyHistogram[i];
-		accum_unlock += unlockLatencyHistogram[i];
-		accum_pipe += pipeLatencyHistogram[i];
 	}
 
 	return 0;
