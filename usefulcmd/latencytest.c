@@ -67,7 +67,7 @@ void * thread( void * v )
 			int timerlatency = getTimeLatency * 1000000;
 			if( timerlatency < 0 ) timerlatency = 0;
 			if( timerlatency >= HIST_MAX ) timerlatency = HIST_MAX-1;
-			__atomic_fetch_add( timerLatencyHistogram + timerlatency, 1, memory_order_relaxed );
+			__atomic_fetch_add( timerLatencyHistogram + timerlatency, 1, memory_order_acq_rel );
 
 			now = GetAbsoluteTime();
 			double delay = ( rand() % 1000000 ) * (maxl - minl) * 0.000001 + minl;
@@ -81,7 +81,7 @@ void * thread( void * v )
 			int index = latency * 1000000;
 			if( index < 0 ) index = 0;
 			if( index >= HIST_MAX ) index = HIST_MAX-1;
-			__atomic_fetch_add( sleepLatencyHistogram + index, 1, memory_order_relaxed );
+			__atomic_fetch_add( sleepLatencyHistogram + index, 1, memory_order_acq_rel );
 		} while( 1 );
 		sem_post( sems[tid] );
 	}
@@ -98,7 +98,7 @@ void * thread( void * v )
 			int index = delta * 1000000;
 			if( index < 0 ) index = 0;
 			if( index >= HIST_MAX ) index = HIST_MAX-1;
-			__atomic_fetch_add( unlockLatencyHistogram + index, 1, memory_order_relaxed );
+			__atomic_fetch_add( unlockLatencyHistogram + index, 1, memory_order_acq_rel );
 			pipetimes[tid] = GetAbsoluteTime();
 			write( pipes[tid*2+1], "hello", 5 );
 		} while( 1 );
@@ -117,7 +117,7 @@ void * thread( void * v )
 			int index = delta * 1000000;
 			if( index < 0 ) index = 0;
 			if( index >= HIST_MAX ) index = HIST_MAX-1;
-			__atomic_fetch_add( pipeLatencyHistogram + index, 1, memory_order_relaxed );
+			__atomic_fetch_add( pipeLatencyHistogram + index, 1, memory_order_acq_rel );
 		} while( 1 );
 	}
 	return 0;
