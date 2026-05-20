@@ -10,6 +10,11 @@ void HandleButton( int x, int y, int button, int bDown ) { }
 void HandleMotion( int x, int y, int mask ) { }
 int HandleDestroy() { return 0; }
 
+int unique_ranges;
+int fixed_range_min_set;
+int fixed_range_max_set;
+double fixed_range_min;
+double fixed_range_max;
 
 double SimpleReadNumber( char ** number_ptr, double defaultNumber )
 {
@@ -75,8 +80,37 @@ uint32_t palette[MAX_SETS] = {
 double data[MAX_PTS][MAX_SETS];
 int    fields_count[MAX_PTS];
 
-int main()
+int main( int argc, char ** argv )
 {
+	int opt;
+    while ((opt = getopt(argc, argv, "un:x:")) != -1) {
+        switch (opt) {
+        case 'u':
+            unique_ranges = 1;
+            break;
+        case 'n':
+		{
+			fixed_range_min_set = 1;
+			char * oain = optarg;
+			fixed_range_min = SimpleReadNumber( &oain, 0.0 / 0.0 );
+			if( fixed_range_min != fixed_range_min ) goto failure;
+            break;
+		}
+        case 'x':
+		{
+			fixed_range_max_set = 1;
+			char * oain = optarg;
+			fixed_range_max = SimpleReadNumber( &oain, 0.0 / 0.0 );
+			if( fixed_range_max != fixed_range_max ) goto failure;
+            break;
+		}
+		failure:
+        default: /* '?' */
+            fprintf(stderr, "Usage: %s [-u (unique range)] [-n min] [-x max] name\n", argv[0]);
+			return -1;
+        }
+    }
+
 	CNFGSetup( "dyngraph", 1024, 768 );
 
 	int head = 0;
@@ -114,14 +148,19 @@ int main()
 		int tw = w - margin_x - margin_w;
 		int th = h - margin_y - margin_h;
 
-		int tx;
-		double tmin = DBL_MAX;
-		double tmax = DBL_MIN;
+		int tx, n, f;
+		double tmin[MAX_SETS];
+		double tmax[MAX_SETS];
 		double tavgs[MAX_SETS] = { 0 };
 		double tcnts[MAX_SETS] = { 0 };
 
+		for( n = 0; n < MAX_SETS; n++ )
+		{
+			tmin[n] = DBL_MAX;
+			tmax[n] = DBL_MIN;
+		}
+
 		int maxf = 0;
-		int f;
 
 		for( tx = 0; tx < tw; tx++ )
 		{
@@ -132,8 +171,8 @@ int main()
 			for( f = 0; f < fc; f++ )
 			{
 				double d = data[eh][f];
-				if( d < tmin ) tmin = d;
-				if( d > tmax ) tmax = d;
+				if( d < tmin[f] ) tmin[f] = d;
+				if( d > tmax[f] ) tmax[f] = d;
 				tavgs[f] += d;
 				tcnts[f] ++;
 			}
@@ -146,8 +185,32 @@ int main()
 
 		double tstds[MAX_SETS] = { 0 };
 
+		double gmin = DBL_MAX;
+		double gmax = DBL_MIN;
+
+		for( n = 0; n < MAX_SETS; n++ )
+		{
+			if( fixed_range_min_set ) tmin[n] = fixed_range_min;
+			if( fixed_range_max_set ) tmax[n] = fixed_range_max;
+			if( tmin[n] < gmin ) gmin = tmin[n];
+			if( tmax[n] > gmax ) gmax = tmax[n];
+		}
+
+		if( !unique_ranges )
+		{
+			for( n = 0; n < MAX_SETS; n++ )
+			{
+				tmin[n] = gmin;
+				tmax[n] = gmax;
+			}
+		}
+
 		double base = th - margin_h;
-		double invrange = 1./(tmax-tmin);
+		double invrange[MAX_SETS];
+		for( n = 0; n < MAX_SETS; n++ )
+		{
+			invrange[n] = 1./(tmax[n]-tmin[n]);
+		}
 
 		double tlasts[MAX_SETS];
 		int    has_tlast[MAX_SETS] = { 0 };
@@ -168,14 +231,14 @@ int main()
 				if( !has_tlast[ f ] )
 				{
 					double d = data[eh][f];
-					double y = h - margin_h - th * ((d - tmin) * invrange);
+					double y = h - margin_h - th * ((d - tmin[f]) * invrange[f]);
 					tlasts[ f ] = y;
 					has_tlast[ f ] = 1;
 				}
 
 				double lasty = tlasts[f];
 				double d = data[eh][f];
-				double y = h - margin_h - th * ((d - tmin) * invrange);
+				double y = h - margin_h - th * ((d - tmin[f]) * invrange[f]);
 				CNFGTackSegment( x, lasty, x+1, y ); 
 				tlasts[f] = y;
 
@@ -185,21 +248,25 @@ int main()
 
 		CNFGColor( 0xffffffff );
 
-		CNFGPenX = 1; CNFGPenY = margin_y;
-		char cts[512];
-		snprintf( cts, sizeof(cts)-1, "%.3f", tmax );
-		CNFGDrawText( cts, 3 );
+		if( !unique_ranges )
+		{
+			CNFGPenX = 1; CNFGPenY = margin_y;
+			char cts[512];
+			snprintf( cts, sizeof(cts)-1, "%.3f", gmax );
+			CNFGDrawText( cts, 3 );
 
-		CNFGPenX = 1; CNFGPenY = h - margin_h;
-		snprintf( cts, sizeof(cts)-1, "%.3f", tmin );
-		CNFGDrawText( cts, 3 );
+			CNFGPenX = 1; CNFGPenY = h - margin_h;
+			snprintf( cts, sizeof(cts)-1, "%.3f", gmin );
+			CNFGDrawText( cts, 3 );
 
-		CNFGPenX = 1; CNFGPenY = 1;
-		snprintf( cts, sizeof(cts)-1, "Range: %.3f", tmax-tmin );
-		CNFGDrawText( cts, 3 );
+			CNFGPenX = 1; CNFGPenY = 1;
+			snprintf( cts, sizeof(cts)-1, "Range: %.3f", gmax-gmin );
+			CNFGDrawText( cts, 3 );
+		}
 
 		for( f = 0; f < maxf; f++ )
 		{
+			char cts[512];
 			CNFGColor( palette[f] );
 
 			tstds[f] = sqrt( tstds[f] ) / tcnts[f];
