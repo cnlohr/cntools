@@ -7,7 +7,7 @@ dyngraph : dyngraph.c
 	gcc  -I../rawdraw -o $@ $^ -lX11 -lm
 
 latencytest : latencytest.c
-	gcc -o $@ $^ -lpthread -O3 -s
+	gcc -o $@ $^ -lpthread -O3 -s -Wno-unused-result
 
 prependtime : prependtime.o
 	gcc -o $@ $^

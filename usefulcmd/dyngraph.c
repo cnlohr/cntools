@@ -5,9 +5,13 @@
 #include <float.h>
 #include <math.h>
 
+int lastMouseX = -1, lastMouseY = -1;
+int clicked = 0;
+int bolded = -1;
+
 void HandleKey( int keycode, int bDown ) { }
-void HandleButton( int x, int y, int button, int bDown ) { }
-void HandleMotion( int x, int y, int mask ) { }
+void HandleButton( int x, int y, int button, int bDown ) { clicked = bDown; }
+void HandleMotion( int x, int y, int mask ) { lastMouseX = x; lastMouseY = y; }
 int HandleDestroy() { return 0; }
 
 int unique_ranges;
@@ -20,7 +24,7 @@ double SimpleReadNumber( char ** number_ptr, double defaultNumber )
 {
 	if( !number_ptr ) return defaultNumber;
 
-	const char * number = *number_ptr;
+	char * number = *number_ptr;
 	if( !number || !number[0] )
 	{
 		*number_ptr = 0;
@@ -35,8 +39,9 @@ double SimpleReadNumber( char ** number_ptr, double defaultNumber )
 	{
 		char nc = number[1];
 		number+=2;
-		if( nc == 0 ) return 0;
+		if( nc == 0 ) { *number_ptr = number-1; return 0; }
 		else if( nc == 'x' ) radix = 16;
+		else if( nc == ' ' || nc == '\t' || nc == ',' || nc == ';' ) { *number_ptr = number-1; return 0; }
 		else if( nc == 'b' ) radix = 2;
 		else { number--; radix = 8; }
 	}
@@ -62,7 +67,7 @@ double SimpleReadNumber( char ** number_ptr, double defaultNumber )
 	}
 }
 
-#define MAX_SETS 8
+#define MAX_SETS 17
 
 uint32_t palette[MAX_SETS] = {
 	0xa5c266ff,
@@ -73,6 +78,17 @@ uint32_t palette[MAX_SETS] = {
 	0x2fd9ffff,
 	0x9fc4e5ff,
 	0xb3b3b3ff,
+
+	0x00488eff,
+	0x00e49fff,
+	0xffbb28ff,
+	0xff8042ff,
+	0x8884d8ff,
+	0xa455a3ff,
+
+	0x0000ffff,
+	0xff0000ff,
+	0x00ff00ff,
 };
 
 #define MAX_PTS 8192
@@ -124,11 +140,13 @@ int main( int argc, char ** argv )
 		char * lp;
 
 		int fields = 0;
+
 		do
 		{
 			lp = l;
-			data[head][fields] = SimpleReadNumber( &l, 0 );
-		} while( l != lp && fields++ < MAX_SETS );
+			double v = data[head][fields] = SimpleReadNumber( &l, 0.0/0.0 );
+			if( v != v ) break;
+		} while( l != lp && fields++ < MAX_SETS - 1 );
 		fields_count[head] = fields;
 
 		CNFGBGColor = 0x000010ff; //Dark Blue Background
@@ -218,7 +236,8 @@ int main( int argc, char ** argv )
 
 		for( f = 0; f < MAX_SETS; f++ )
 		{
-
+			int tline = bolded == f;
+			if( tline ) CNFGSetLineWidth( 3 );
 			CNFGColor( palette[f] );
 			
 			for( tx = 0; tx < tw; tx++ )
@@ -244,6 +263,7 @@ int main( int argc, char ** argv )
 
 				tstds[f] += (d - tavgs[f])*(d - tavgs[f]);
 			}
+			if( tline ) CNFGSetLineWidth( 1 );
 		}
 
 		CNFGColor( 0xffffffff );
@@ -264,18 +284,33 @@ int main( int argc, char ** argv )
 			CNFGDrawText( cts, 3 );
 		}
 
-		for( f = 0; f < maxf; f++ )
-		{
-			char cts[512];
-			CNFGColor( palette[f] );
+		int lbold = bolded;
+		bolded = -1;
 
+		for( f = 0; f < maxf; f++ )
 			tstds[f] = sqrt( tstds[f] ) / tcnts[f];
 
-			CNFGPenX = w - 400; CNFGPenY = h - 200 + f * 14;
-			snprintf( cts, sizeof(cts)-1, "%d: AVG: %.3f STD: %.3f R%%: %.3f", f, tavgs[f], tstds[f], tstds[f] * 100 / tavgs[f] );
-			CNFGDrawText( cts, 3 );
+
+		for( f = 0; f < maxf; f++ )
+		{
+			for( int foregrounded = 0; foregrounded < 2; foregrounded++ )
+			{
+				int tline = lbold == f;
+				if( tline ) CNFGSetLineWidth( 2 + (foregrounded?0:2) );
+				else CNFGSetLineWidth(1+(foregrounded?0:2));
+
+				char cts[512];
+				CNFGColor( foregrounded ? palette[f] : 0x000000ff );
+
+				CNFGPenX = w - 400; CNFGPenY = h - 300 + f * 16;
+				snprintf( cts, sizeof(cts)-1, "%d: AVG: %.3f STD: %.3f R%%: %.3f", f, tavgs[f], tstds[f], tstds[f] * 100 / tavgs[f] );
+				CNFGDrawText( cts, 3 );
+
+				if( lastMouseX >= CNFGPenX && lastMouseY >= CNFGPenY && lastMouseY < CNFGPenY + 16 ) bolded = f;
+			}
 		}
 
+		CNFGSetLineWidth( 1 );
 
 		//Display the image and wait for time to display next frame.
 		CNFGSwapBuffers();
