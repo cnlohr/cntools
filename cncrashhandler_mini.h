@@ -235,18 +235,19 @@ void sighandler(int sig,  siginfo_t *info, struct sigcontext ctx)
 	printf( "FA: %p / SP: %p / PC: %p / PS: %p\n", ctx.fault_address, ctx.sp, ctx.pc, ctx.pstate );
 	for( i = 0; i < 31; i++ )
 	{
+		if( stp - last_crash_text >= CRASHDUMPBUFFER - 1 ) break;
 		intptr_t ip = ctx.regs[i];
                 sel = tcccrash_symget( ip );
                 ip = (intptr_t)btrace[i];
                 if( sel )
                 {
                         printf( "%2d [%p] %s : %s(+0x%02x)\n", i, (void*)ip, sel->path, sel->name, (int)(intptr_t)(ip-sel->address) );
-                        stp += sprintf( stp, "%2d [%p] %s : %s(+0x%02x)\n", i, (void*)ip, sel->path, sel->name, (int)(intptr_t)(ip-sel->address) );
+                        stp += snprintf( stp, last_crash_text + CRASHDUMPBUFFER - stp, "%2d [%p] %s : %s(+0x%02x)\n", i, (void*)ip, sel->path, sel->name, (int)(intptr_t)(ip-sel->address) );
                 }
                 else
                 {
                         printf( "%2d [%p]\n", i, (void*)ip );
-                        stp += sprintf( stp, "%2d [%p]\n", i, (void*)ip );
+                        stp += snprintf( stp, last_crash_text + CRASHDUMPBUFFER - stp, "%2d [%p]\n", i, (void*)ip );
                 }
 	}
 #endif
@@ -264,12 +265,12 @@ void sighandler(int sig,  siginfo_t *info, struct sigcontext ctx)
 	sel = tcccrash_symget( ip );
 	if( sel )
 	{
-		stp += sprintf( stp, "[%p] %s : %s(+0x%02x)\n", (void*)ip, sel->path, sel->name, (int)(intptr_t)(ip - sel->address) );
+		stp += snprintf( stp, last_crash_text + CRASHDUMPBUFFER - stp, "[%p] %s : %s(+0x%02x)\n", (void*)ip, sel->path, sel->name, (int)(intptr_t)(ip - sel->address) );
 		printf( "    %s(+0x%02x)**\n", sel->name, (int)(intptr_t)(ip - sel->address) );
 	}
 	else
 	{
-		stp += sprintf( stp, "[%p]\n", (void*)ip );
+		stp += snprintf( stp, last_crash_text + CRASHDUMPBUFFER - stp, "[%p]\n", (void*)ip );
 		printf( "    %p**\n", (void*)ip );
 	}
 
@@ -319,12 +320,13 @@ void sighandler(int sig,  siginfo_t *info, struct sigcontext ctx)
 	stp += sprintf( stp, "==========================================%d [%p]\n", btl, rsp );
 	for( i = 0; i < btl; i++ )
 	{
+		if( stp - last_crash_text >= CRASHDUMPBUFFER - 1 ) break;
 		sel = tcccrash_symget( (intptr_t)btrace[i] );
 		ip = (intptr_t)btrace[i];
 		if( sel )
 		{
 			printf( "[%p] %s : %s(+0x%02x)\n", (void*)ip, sel->path, sel->name, (int)(intptr_t)(ip-sel->address) );
-			stp += sprintf( stp, "[%p] %s : %s(+0x%02x)\n", (void*)ip, sel->path, sel->name, (int)(intptr_t)(ip-sel->address) );
+			stp += snprintf( stp, last_crash_text + CRASHDUMPBUFFER - stp, "[%p] %s : %s(+0x%02x)\n", (void*)ip, sel->path, sel->name, (int)(intptr_t)(ip-sel->address) );
 		}
 		else
 		{
