@@ -8,9 +8,20 @@
 int lastMouseX = -1, lastMouseY = -1;
 int clicked = 0;
 int bolded = -1;
+int boldedPin = -1;
+int suppress_stderr = 0;
 
-void HandleKey( int keycode, int bDown ) { }
-void HandleButton( int x, int y, int button, int bDown ) { clicked = bDown; }
+void HandleKey( int keycode, int bDown ) {  }
+void HandleButton( int x, int y, int button, int bDown )
+{
+	clicked = bDown;
+	if( bDown )
+		if( boldedPin < 0 )
+			boldedPin = bolded;
+		else
+			boldedPin = -1;
+}
+
 void HandleMotion( int x, int y, int mask ) { lastMouseX = x; lastMouseY = y; }
 int HandleDestroy() { return 0; }
 
@@ -99,11 +110,14 @@ int    fields_count[MAX_PTS];
 int main( int argc, char ** argv )
 {
 	int opt;
-    while ((opt = getopt(argc, argv, "un:x:")) != -1) {
+    while ((opt = getopt(argc, argv, "sun:x:")) != -1) {
         switch (opt) {
         case 'u':
             unique_ranges = 1;
             break;
+		case 's':
+			suppress_stderr = 1;
+			break;
         case 'n':
 		{
 			fixed_range_min_set = 1;
@@ -141,6 +155,12 @@ int main( int argc, char ** argv )
 
 		int fields = 0;
 
+		if( !suppress_stderr )
+		{
+			fwrite( l, 1, strlen( l ), stderr );
+			fflush( stderr );
+		}
+
 		do
 		{
 			lp = l;
@@ -155,8 +175,6 @@ int main( int argc, char ** argv )
 		CNFGClearFrame();
 		CNFGGetDimensions( &w, &h );
 
-		//Change color to white.
-		CNFGColor( 0xffffffff );
 
 		int margin_x = 100;
 		int margin_y = 20;
@@ -223,6 +241,21 @@ int main( int argc, char ** argv )
 			}
 		}
 
+		int lbold = bolded;
+		bolded = -1;
+
+		if( boldedPin >= 0 ) lbold = boldedPin;
+
+		CNFGColor( 0x202020ff );
+
+		CNFGTackSegment( margin_x, margin_y, w-margin_w, margin_y );
+		CNFGTackSegment( margin_x, margin_y, margin_x, h-margin_h );
+		CNFGTackSegment( margin_x, h-margin_h, w-margin_w, h-margin_h );
+		CNFGTackSegment( w-margin_w, margin_y, w-margin_w, h-margin_h );
+
+		//Change color to white.
+		CNFGColor( 0xffffffff );
+
 		double base = th - margin_h;
 		double invrange[MAX_SETS];
 		for( n = 0; n < MAX_SETS; n++ )
@@ -231,12 +264,15 @@ int main( int argc, char ** argv )
 		}
 
 		double tlasts[MAX_SETS];
+		double frontmost[MAX_SETS] = { 0 };
+		double frontfiltered[MAX_SETS] = { 0 };
+		int    frontcounts[MAX_SETS] = { 0 };
 		int    has_tlast[MAX_SETS] = { 0 };
 
-
+		float fdistclosest = 5.0;
 		for( f = 0; f < MAX_SETS; f++ )
 		{
-			int tline = bolded == f;
+			int tline = lbold == f;
 			if( tline ) CNFGSetLineWidth( 3 );
 			CNFGColor( palette[f] );
 			
@@ -258,8 +294,24 @@ int main( int argc, char ** argv )
 				double lasty = tlasts[f];
 				double d = data[eh][f];
 				double y = h - margin_h - th * ((d - tmin[f]) * invrange[f]);
-				CNFGTackSegment( x, lasty, x+1, y ); 
+				CNFGTackSegment( x, lasty, x+1, y );
+
+				float distsq = (lastMouseX-x)*(lastMouseX-x)+(lastMouseY-y)*(lastMouseY-y);
+				if( distsq < fdistclosest )
+				{
+					fdistclosest = distsq;
+					bolded = f;
+				}
+
 				tlasts[f] = y;
+
+				if( frontcounts[f] < 10 )
+				{
+					if( frontcounts[f] == 0 )
+						frontmost[f] = d;
+					frontcounts[f]++;
+					frontfiltered[f] += y;
+				}
 
 				tstds[f] += (d - tavgs[f])*(d - tavgs[f]);
 			}
@@ -270,22 +322,26 @@ int main( int argc, char ** argv )
 
 		if( !unique_ranges )
 		{
-			CNFGPenX = 1; CNFGPenY = margin_y;
-			char cts[512];
-			snprintf( cts, sizeof(cts)-1, "%.3f", gmax );
-			CNFGDrawText( cts, 3 );
 
-			CNFGPenX = 1; CNFGPenY = h - margin_h;
-			snprintf( cts, sizeof(cts)-1, "%.3f", gmin );
-			CNFGDrawText( cts, 3 );
+			for( int foregrounded = 0; foregrounded < 2; foregrounded++ )
+			{
+				CNFGSetLineWidth( 1 + (foregrounded?0:2) );
+				CNFGColor( foregrounded ? 0xffffffff: 0x000000ff );
 
-			CNFGPenX = 1; CNFGPenY = 1;
-			snprintf( cts, sizeof(cts)-1, "Range: %.3f", gmax-gmin );
-			CNFGDrawText( cts, 3 );
+				CNFGPenX = margin_x + 10; CNFGPenY = 2;
+				char cts[512];
+				snprintf( cts, sizeof(cts)-1, "Max %.3f", gmax );
+				CNFGDrawText( cts, 3 );
+
+				CNFGPenX = margin_x + 10; CNFGPenY = h - margin_h + 2;
+				snprintf( cts, sizeof(cts)-1, "Min %.3f", gmin );
+				CNFGDrawText( cts, 3 );
+
+				CNFGPenX = w - 160; CNFGPenY = h - 20;
+				snprintf( cts, sizeof(cts)-1, "Range: %.3f", gmax-gmin );
+				CNFGDrawText( cts, 3 );
+			}
 		}
-
-		int lbold = bolded;
-		bolded = -1;
 
 		for( f = 0; f < maxf; f++ )
 			tstds[f] = sqrt( tstds[f] ) / tcnts[f];
@@ -302,11 +358,17 @@ int main( int argc, char ** argv )
 				char cts[512];
 				CNFGColor( foregrounded ? palette[f] : 0x000000ff );
 
-				CNFGPenX = w - 400; CNFGPenY = h - 300 + f * 16;
+				CNFGPenX = w - 400; CNFGPenY = h - (maxf+1)*16 - 10 + f * 16;
 				snprintf( cts, sizeof(cts)-1, "%d: AVG: %.3f STD: %.3f R%%: %.3f", f, tavgs[f], tstds[f], tstds[f] * 100 / tavgs[f] );
 				CNFGDrawText( cts, 3 );
-
 				if( lastMouseX >= CNFGPenX && lastMouseY >= CNFGPenY && lastMouseY < CNFGPenY + 16 ) bolded = f;
+
+				int tw, th;
+				snprintf( cts, sizeof(cts)-1, "%.3f", frontmost[f] );
+				CNFGGetTextExtents( cts, &tw, &th, 3 );
+				CNFGPenX = margin_x - tw - 3; CNFGPenY = frontfiltered[f]/frontcounts[f] - 7;
+				CNFGDrawText( cts, 3 );
+				if( lastMouseX >= 0 && lastMouseX < margin_x && lastMouseY >= CNFGPenY && lastMouseY < CNFGPenY + 16 ) bolded = f;
 			}
 		}
 
