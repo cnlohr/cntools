@@ -429,7 +429,7 @@ int main( int argc, char ** argv )
 				CNFGDrawText( cts, 3 );
 
 				int tw, th;
-				snprintf( cts, sizeof(cts)-1, "Range: %.3f", gmax-gmin );
+				snprintf( cts, sizeof(cts)-1, "Range: %.3f Sets: %d", gmax-gmin, highest_sets );
 				CNFGGetTextExtents( cts, &tw, &th, 3 );
 				CNFGPenX = w - margin_w - 2 - tw; CNFGPenY = h - margin_h + 3;
 				CNFGDrawText( cts, 3 );
