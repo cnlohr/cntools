@@ -81,7 +81,7 @@ double SimpleReadNumber( char ** number_ptr, double defaultNumber )
 	}
 }
 
-#define MAX_SETS 256
+#define MAX_SETS 512
 
 uint32_t palette[MAX_SETS] = {
 	0xa5c266ff,
