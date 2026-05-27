@@ -13,6 +13,7 @@ int bolded = -1;
 int boldedPin = -1;
 int suppress_stdout = 0;
 int line_graph_mode_depth = 0;
+int hex_mode = 0;
 
 void HandleKey( int keycode, int bDown ) {  }
 void HandleButton( int x, int y, int button, int bDown )
@@ -34,7 +35,7 @@ int fixed_range_max_set;
 double fixed_range_min;
 double fixed_range_max;
 
-double SimpleReadNumber( char ** number_ptr, double defaultNumber )
+double SimpleReadNumber( char ** number_ptr, double defaultNumber, int override_radix )
 {
 	if( !number_ptr ) return defaultNumber;
 
@@ -49,17 +50,25 @@ double SimpleReadNumber( char ** number_ptr, double defaultNumber )
 
 	int radix = 10;
 	double ret;
-	if( number[0] == '0' )
+	if( override_radix )
 	{
-		char nc = number[1];
-		number+=2;
-		if( nc == 0 ) { *number_ptr = number-1; return 0; }
-		else if( nc == 'x' ) radix = 16;
-		else if( nc == ' ' || nc == '\t' || nc == ',' || nc == ';' ) { *number_ptr = number-1; return 0; }
-		else if( nc == 'b' ) radix = 2;
-		else { number--; radix = 8; }
+		radix = override_radix;
+	}
+	else
+	{
+		if( number[0] == '0' )
+		{
+			char nc = number[1];
+			number+=2;
+			if( nc == 0 ) { *number_ptr = number-1; return 0; }
+			else if( nc == 'x' ) radix = 16;
+			else if( nc == ' ' || nc == '\t' || nc == ',' || nc == ';' ) { *number_ptr = number-1; return 0; }
+			else if( nc == 'b' ) radix = 2;
+			else { number--; radix = 8; }
+		}
 	}
 	char * endptr;
+
 	if( radix != 10 )
 	{
 		ret = strtoll( number, &endptr, radix );
@@ -125,12 +134,15 @@ int    has_tlast[MAX_SETS];
 int main( int argc, char ** argv )
 {
 	int opt;
-    while ((opt = getopt(argc, argv, "l:sun:x:")) != -1) {
+    while ((opt = getopt(argc, argv, "l:shun:x:")) != -1) {
         switch (opt) {
 		case 'l':
 			char * oain = optarg;
-			line_graph_mode_depth = SimpleReadNumber( &oain, 0.0 / 0.0 );
+			line_graph_mode_depth = SimpleReadNumber( &oain, 0.0 / 0.0, 0 );
 			if( line_graph_mode_depth != line_graph_mode_depth ) goto failure;
+			break;
+		case 'h':
+			hex_mode = 1;
 			break;
         case 'u':
             unique_ranges = 1;
@@ -142,7 +154,7 @@ int main( int argc, char ** argv )
 		{
 			fixed_range_min_set = 1;
 			char * oain = optarg;
-			fixed_range_min = SimpleReadNumber( &oain, 0.0 / 0.0 );
+			fixed_range_min = SimpleReadNumber( &oain, 0.0 / 0.0, 0 );
 			if( fixed_range_min != fixed_range_min ) goto failure;
             break;
 		}
@@ -150,13 +162,13 @@ int main( int argc, char ** argv )
 		{
 			fixed_range_max_set = 1;
 			char * oain = optarg;
-			fixed_range_max = SimpleReadNumber( &oain, 0.0 / 0.0 );
+			fixed_range_max = SimpleReadNumber( &oain, 0.0 / 0.0, 0 );
 			if( fixed_range_max != fixed_range_max ) goto failure;
             break;
 		}
 		failure:
         default: /* '?' */
-            fprintf(stderr, "Usage: %s [-u (unique range)] [-n min] [-x max] [-s (suppress output duplication)] [-l line-graph-mode-depth]\n", argv[0]);
+            fprintf(stderr, "Usage: %s [-h (hex mode)] [-u (unique range)] [-n min] [-x max] [-s (suppress output duplication)] [-l line-graph-mode-depth]\n", argv[0]);
 			return -1;
         }
     }
@@ -186,7 +198,7 @@ int main( int argc, char ** argv )
 		do
 		{
 			lp = l;
-			double v = data[head][fields] = SimpleReadNumber( &l, 0.0/0.0 );
+			double v = data[head][fields] = SimpleReadNumber( &l, 0.0/0.0, hex_mode ? 16 : 0 );
 			if( v != v ) break;
 		} while( l != lp && fields++ < MAX_SETS - 1 );
 		fields_count[head] = fields;
