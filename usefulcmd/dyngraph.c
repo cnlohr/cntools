@@ -3,7 +3,7 @@
 
 #include "rawdraw_sf.h"
 #include "os_generic.h"
-
+#include <poll.h>
 #include <float.h>
 #include <math.h>
 
@@ -141,7 +141,7 @@ int main( int argc, char ** argv )
 			line_graph_mode_depth = SimpleReadNumber( &oain, 0.0 / 0.0, 0 );
 			if( line_graph_mode_depth != line_graph_mode_depth ) goto failure;
 			break;
-		case 'h':
+		case 'e':
 			hex_mode = 1;
 			break;
         case 'u':
@@ -178,39 +178,72 @@ int main( int argc, char ** argv )
 	int head = 0;
 	int highest_sets = 0;
 
+	char sline[16384];
+	int lineptr = 0;
 	while(CNFGHandleInput())
 	{
-		char sline[16384];
-		char * l = fgets( sline, sizeof(sline), stdin);
-		if( !l ) break;
-		times[head] = OGGetAbsoluteTime();
-
-		char * lp;
-
-		int fields = 0;
-
-		if( !suppress_stdout )
-		{
-			fwrite( l, 1, strlen( l ), stdout );
-			fflush( stdout );
-		}
-
+		int mark_for_idle = 0;
+		double dStartProcessing = OGGetAbsoluteTime();
 		do
 		{
-			lp = l;
-			double v = data[head][fields] = SimpleReadNumber( &l, 0.0/0.0, hex_mode ? 16 : 0 );
-			if( v != v ) break;
-		} while( l != lp && fields++ < MAX_SETS - 1 );
-		fields_count[head] = fields;
+			struct pollfd pfd = { STDIN_FILENO, POLLIN, 0, };
+			int r = poll( &pfd, 1, 100 );
+			if( r <= 0 || ! (pfd.revents & POLLIN ) )
+			{
+				// Timed out (slow data)
+				break;
+			}
 
-		if( fields > highest_sets )
-		{
-			highest_sets = fields;
-		}
-		for( ; fields < MAX_SETS; fields++ )
-		{
-			data[head][fields] = 0.0/0.0;
-		}
+			r = read( STDIN_FILENO, sline + lineptr, 1 );
+
+			struct pollfd pfdidle = { STDIN_FILENO, POLLIN, 0, };
+			int rp = poll( &pfdidle, 1, 0 );
+			if( rp <= 0 || ! (pfd.revents & POLLIN ) )
+			{
+				mark_for_idle = 1;
+			}
+
+			if( OGGetAbsoluteTime() - dStartProcessing > 0.1 ) mark_for_idle = 1;
+
+			if( r < 1 ) { return 0; }
+			if( lineptr >= sizeof( sline ) - 1 ) { if( sline[lineptr] == '\n' ) lineptr = 0; continue; }
+			int c = sline[lineptr++];
+			if( c == '\n' )
+			{
+				sline[lineptr] = 0;
+				times[head] = OGGetAbsoluteTime();
+
+				int fields = 0;
+
+				if( !suppress_stdout )
+				{
+					fwrite( sline, 1, lineptr, stdout );
+					fflush( stdout );
+				}
+				char * l = sline;
+				char * lp;
+
+				do
+				{
+					lp = l;
+					double v = data[head][fields] = SimpleReadNumber( &l, 0.0/0.0, hex_mode ? 16 : 0 );
+					if( v != v ) break;
+				} while( l != lp && fields++ < MAX_SETS - 1 );
+				fields_count[head] = fields;
+				if( fields > highest_sets )
+				{
+					highest_sets = fields;
+				}
+				for( ; fields < MAX_SETS; fields++ )
+				{
+					data[head][fields] = 0.0/0.0;
+				}
+
+				head = (head+1) % MAX_PTS;
+				lineptr = 0;
+			}
+		} while( !mark_for_idle );
+
 
 		CNFGBGColor = 0x000010ff; //Dark Blue Background
 
@@ -248,7 +281,7 @@ int main( int argc, char ** argv )
 
 		for( tx = 0; tx < hist; tx++ )
 		{
-			int eh = ((((head - tx) % MAX_PTS ) + MAX_PTS ) % MAX_PTS );
+			int eh = ((((head - tx - 1) % MAX_PTS ) + MAX_PTS ) % MAX_PTS );
 			int fc = fields_count[eh];
 			if( fc > maxf ) maxf = fc;
 			int has_data = 0;
@@ -341,7 +374,7 @@ int main( int argc, char ** argv )
 			for( td = 0; td < line_graph_mode_depth; td++ )
 			{
 				int itd = line_graph_mode_depth - 1 - td;
-				int eh = ((((head - itd) % MAX_PTS ) + MAX_PTS ) % MAX_PTS );
+				int eh = ((((head - itd - 1) % MAX_PTS ) + MAX_PTS ) % MAX_PTS );
 				int col = 255 - ((255*itd)/line_graph_mode_depth);
 				CNFGColor( 0xff | (col<<8) | (col<<16) | (col<<24) );
 				int lastx = 0;
@@ -381,7 +414,7 @@ int main( int argc, char ** argv )
 				
 				for( tx = 0; tx < tw; tx++ )
 				{
-					int eh = ((((head - tx) % MAX_PTS ) + MAX_PTS ) % MAX_PTS );
+					int eh = ((((head - tx - 1) % MAX_PTS ) + MAX_PTS ) % MAX_PTS );
 					int fc = fields_count[eh];
 					int x = tx + margin_x;
 					if( fc <= f ) continue;
@@ -508,7 +541,5 @@ int main( int argc, char ** argv )
 
 		//Display the image and wait for time to display next frame.
 		CNFGSwapBuffers();
-
-		head = (head+1) % MAX_PTS;		
 	}
 }
