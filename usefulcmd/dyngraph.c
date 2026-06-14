@@ -62,6 +62,7 @@ double SimpleReadNumber( char ** number_ptr, double defaultNumber, int override_
 			number+=2;
 			if( nc == 0 ) { *number_ptr = number-1; return 0; }
 			else if( nc == 'x' ) radix = 16;
+			else if( nc == '.' ) number -= 2; // "0.5" is a decimal fraction, not octal - rewind so strtod sees the whole token
 			else if( nc == ' ' || nc == '\t' || nc == ',' || nc == ';' ) { *number_ptr = number-1; return 0; }
 			else if( nc == 'b' ) radix = 2;
 			else { number--; radix = 8; }
