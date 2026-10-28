@@ -169,7 +169,7 @@ int main( int argc, char ** argv )
 		}
 		failure:
         default: /* '?' */
-            fprintf(stderr, "Usage: %s [-h (hex mode)] [-u (unique range)] [-n min] [-x max] [-s (suppress output duplication)] [-l line-graph-mode-depth]\n", argv[0]);
+            fprintf(stderr, "Usage: %s [-e (hex mode)] [-u (unique range)] [-n min] [-x max] [-s (suppress output duplication)] [-l line-graph-mode-depth]\n", argv[0]);
 			return -1;
         }
     }
