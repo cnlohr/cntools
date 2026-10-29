@@ -135,7 +135,7 @@ int    has_tlast[MAX_SETS];
 int main( int argc, char ** argv )
 {
 	int opt;
-    while ((opt = getopt(argc, argv, "l:shun:x:")) != -1) {
+    while ((opt = getopt(argc, argv, "l:sehun:x:")) != -1) {
         switch (opt) {
 		case 'l':
 			char * oain = optarg;
@@ -266,7 +266,7 @@ int main( int argc, char ** argv )
 		for( n = 0; n < highest_sets; n++ )
 		{
 			tmin[n] = DBL_MAX;
-			tmax[n] = DBL_MIN;
+			tmax[n] = -DBL_MAX;
 			tavgs[n] = 0;
 			tcnts[n] = 0;
 			tstds[n] = 0;
@@ -322,7 +322,7 @@ int main( int argc, char ** argv )
 
 
 		double gmin = DBL_MAX;
-		double gmax = DBL_MIN;
+		double gmax = -DBL_MAX;
 
 		for( n = 0; n < highest_sets; n++ )
 		{
